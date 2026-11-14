@@ -529,7 +529,7 @@ function say(text, opts = {}) {
 // After Orbi finishes speaking outside a chat turn (a result, a cancel, a deposit), the screen must go back to idle, or it stays on "Orbi is speaking".
 async function sayAndSettle(text, o = {}) {
   await say(text, {});
-  if (o.listen && !busy && !recording && !isSpeaking() && !awaitingTap) { listenOnce({ followUp: true }); return; }   // after a transaction: keep listening, no need to say "Hey Orbi" again
+  if (o.listen && roomRms < 0.02 && !busy && !recording && !isSpeaking() && !awaitingTap) { listenOnce({ followUp: true }); return; }   // after a transaction: keep listening, no need to say "Hey Orbi" again
   if (mode === "speaking" && !isSpeaking() && !busy) { setMode("idle", idleMsg()); if ($("wake").checked && !awaitingTap) startWake(); }
 }
 function stopSpeaking() {
@@ -642,7 +642,7 @@ async function ask(text, viaVoice = false, meta = null) {
 let stream = null, lastAck = "";
 // Background noise filter. Orbi only counts sound as YOU talking when it is clearly above the room's noise, for a moment
 // (a door slam or a passing word is not enough), and far-away voices are quieter than yours at the mic.
-const GATE = { auto: 0.028, quiet: 0.015, normal: 0.028, noisy: 0.05 };
+const GATE = { auto: 0.034, quiet: 0.015, normal: 0.028, noisy: 0.05 };
 // Crowded places: the browser's own noise suppression and voice isolation are asked for, and Orbi keeps a running estimate of how loud
 // the room is even while idle (roomRms: it falls quickly when the room goes quiet and rises slowly, so your own voice barely moves it).
 // Your voice has to be clearly above the room, the wake word gets stricter as the room gets louder, and speech with no real voice at the mic is ignored.
@@ -650,8 +650,8 @@ const MIC = { audio: { echoCancellation: true, noiseSuppression: true, autoGainC
 let roomRms = 0.008;
 function wakeLevel() {   // how sure the wake-word model must be, by the room's noise
   const n = $("noise").value;
-  if (n === "quiet") return 0.32; if (n === "normal") return 0.38; if (n === "noisy") return 0.55;
-  return roomRms > 0.045 ? 0.56 : roomRms > 0.025 ? 0.47 : 0.38;
+  if (n === "quiet") return 0.4; if (n === "normal") return 0.46; if (n === "noisy") return 0.62;
+  return roomRms > 0.03 ? 0.62 : roomRms > 0.015 ? 0.54 : 0.45;   // people talking nearby read about 0.015 and up
 }
 const tuneWake = () => { try { if (engine && engine.config) engine.config.detectionThreshold = wakeLevel(); } catch {} };
 const SHORT_OK = /^(yes|yeah|yep|no|nope|okay|ok|sure|thanks|thank you|cancel|stop|go ahead|please|never mind|nevermind|that's all|what|why|how|really|and|continue|repeat that|say that again)$/i;
@@ -699,10 +699,10 @@ async function listenOnce(opts = {}) {
     const rms = Math.sqrt(sum / d.length);
     micLevel += (Math.min(1, rms * 9) - micLevel) * 0.5;
     const chunkMs = d.length / ctx.sampleRate * 1000;
-    const thr = Math.max(GATE[$("noise").value] || GATE.normal, floor * 4) * (opts.followUp ? 1.5 : 1);   // automatic follow-up listening is stricter
+    const auto = $("noise").value === "auto", thr = Math.max(GATE[$("noise").value] || GATE.normal, floor * (auto ? 5 : 4)) * (opts.followUp ? 1.5 : 1);   // automatic follow-up listening is stricter
     if (rms > thr) {
-      loudMs += chunkMs; peak = Math.max(peak, rms);
-      if (loudMs >= 220) spoke = true;                                                    // sustained, not a click or one passing word
+      loudMs += chunkMs; peak = Math.max(peak, rms); if (!spoke) floor += (rms - floor) * 0.02;   // steady chatter slowly becomes part of the room; your voice is a burst well above it
+      if (loudMs >= (auto ? 320 : 220) && peak > floor * (auto ? 5.5 : 3)) spoke = true;                                                    // sustained, not a click or one passing word
       if (spoke) { lastVoice = now; voicedMs += chunkMs; }
     } else { loudMs = Math.max(0, loudMs - chunkMs * 0.5); floor += (rms - floor) * 0.04; }   // learn the room's noise level from the quiet parts
     const quiet = now - lastVoice;
@@ -742,7 +742,7 @@ async function listenOnce(opts = {}) {
   if (!text) { setMode("idle", "I couldn't make that out."); if ($("wake").checked) startWake(); return; }
   if (opts.followUp) {      // nobody said "Hey Orbi" or tapped: be picky, so a TV or a nearby conversation is not taken as a question
     const words = text.trim().split(/\s+/).length, known = confs.filter((c) => typeof c === "number" && c > 0), conf = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
-    if ((words < 2 && !SHORT_OK.test(text.trim().replace(/[.!?,]+$/, ""))) || (via === "browser" && conf < 0.6)) { setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
+    if ((words < 2 && !SHORT_OK.test(text.trim().replace(/[.!?,]+$/, ""))) || (via === "browser" && conf < (roomRms > 0.015 ? 0.78 : 0.6))) { setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
   }
   ask(text.replace(/^\s*(hey|hi|okay|ok)[ ,]+orbi[ ,.!?]*/i, "") || text, true, { heardMs: performance.now() - endedAt, via });
 }
@@ -824,7 +824,7 @@ async function engineStart() {
       const { WakeWordEngine } = await import("/wake/WakeWordEngine.js");
       engine = new WakeWordEngine({
         keywords: [kw], baseAssetUrl: "/wake/models", ortWasmPath: "/wake/",
-        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.38, cooldownMs: 1200,
+        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.45, cooldownMs: 1500,
       });
       engine.on("detect", () => {
         if (!$("wake").checked || recording) return;
@@ -871,7 +871,7 @@ async function viStart() {
       viHits = 0;
       if (viAn && !recording && !isSpeaking() && viCtx.state === "running") {   // idle: keep learning how loud the room is
         viAn.getFloatTimeDomainData(viBuf); let q = 0; for (let i = 0; i < viBuf.length; i++) q += viBuf[i] * viBuf[i];
-        const r = Math.sqrt(q / viBuf.length); roomRms += (r - roomRms) * (r < roomRms ? 0.2 : 0.004);
+        const r = Math.sqrt(q / viBuf.length); roomRms += (r - roomRms) * (r < roomRms ? 0.15 : 0.03);   // a crowd is noticed within a few seconds
         if (++roomTick % 12 === 0) tuneWake();
       }
       return;
