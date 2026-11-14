@@ -188,6 +188,12 @@
   #card .det > .kv, #card .det > .line, #card .det > .addr { margin-left: 14px; margin-right: 14px; }
   #card .det > .kv:first-of-type { border-top: 1px solid rgba(255, 255, 255, .08); }
   #card .det > .addr { margin-top: 10px; margin-bottom: 14px; }
+  #card .dstat { display: flex; align-items: center; gap: 14px; padding: 4px 0 8px; font-size: 15px; font-weight: 600; }
+  #card .dstat .ic { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; border: 2px solid rgba(255, 255, 255, .22); font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, .06); }
+  #card .dstat .ic.doing { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+  #card .dstat .ic.done { background: rgba(110, 231, 183, .14); border-color: var(--ok); color: var(--ok); }
+  #card .dstat .ic.failed { border-color: var(--bad); color: var(--bad); background: rgba(255, 143, 143, .12); }
+  #card .dstat.ok .t { color: var(--ok); } #card .dstat.bad .t { color: var(--bad); }
   #card .sum { color: var(--dim); font-size: 14px; margin: -8px 0 14px; }
 
   /* bottom dock */
@@ -942,9 +948,9 @@ function heroOf(pl, c) {
   if (typeof c.usd === "number" && c.usd > 0) h.append(el("div", "usd", "about $" + c.usd.toFixed(2) + (pl.kind === "swap" ? " · an estimate, the price can move a little" : "")));
   return h;
 }
-function flowOf(dest, running) {
+function flowOf(dest, running, start = "Orbi wallet") {
   const f = el("div", "flow"), from = el("div", "node"), w = el("div", "wire"), to = el("div", "node to");
-  from.append(el("span", "dot"), document.createTextNode("Orbi wallet")); to.append(el("span", "dot"), document.createTextNode(dest));
+  from.append(el("span", "dot"), document.createTextNode(start)); to.append(el("span", "dot"), document.createTextNode(dest));
   if (running) { w.classList.add("run"); w.append(el("b"), el("b"), el("b")); }
   f.append(from, w, to); return f;
 }
@@ -1001,35 +1007,66 @@ function showDeposit(c) {
   clearCardTimer(); card = c; awaitingTap = false;
   const box = $("card"); box.hidden = false; box.className = ""; box.textContent = "";
   document.body.classList.add("hasCard"); resize(); box.scrollIntoView({ block: "nearest" });
-  box.append(el("div", "tag", "Deposit · you send the USDC, Orbi sends nothing"));
-  box.append(el("h2", "", c.title));
-  for (const l of c.lines) { const m = /^([^:]{2,26}):\s+(.+)$/.exec(l); if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); box.append(row); } else box.append(el("div", "line", l)); }
+  box.append(whoOf("Orbi is setting up a deposit", "You send the USDC. Orbi signs nothing on Base."));
+  const gets = (c.lines.map((l) => /^You get:\s+(.+)$/.exec(l)).find(Boolean) || [])[1];
+  const hero = el("div", "hero"), amt = el("div", "amt"); amt.append(document.createTextNode(c.amount || ""), el("small", "", "USDC"));
+  hero.append(amt, el("div", "usd", "from Base" + (gets ? " \u00b7 you get " + gets : ""))); box.append(hero);
+  const okl = el("div", "okline"); okl.append(el("i", "", "\u2713"), document.createTextNode("Orbi sends nothing and holds no Base key")); box.append(okl);
+  const flow = flowOf("Orbi wallet", false, "Your wallet \u00b7 Base"), wire = flow.querySelector(".wire"), toNode = flow.querySelector(".node.to"); box.append(flow);
   for (const w of c.warnings) box.append(el("div", "warn", "Note: " + w));
   const a = el("div", "addr"); a.append(el("span", "k", "Deposit address on Base: check every part"));
   a.append(el("code", "", c.address.match(/.{1,8}/g).join(" ")));
   const qrBox = el("div", "qr"); a.append(qrBox); drawQr(qrBox, c.address);
   const ar = el("div", "cp"); ar.append(copyBtn(c.address)); a.append(ar); box.append(a);
-  const status = el("div", "line", "Waiting for your deposit…"); status.id = "depStatus"; box.append(status);
+  const det = el("details", "det"), sum = el("summary"); sum.append(el("span", "", "Details"), el("em", "", "Base \u00b7 " + (c.amount || "") + " USDC"), el("i")); det.append(sum);
+  for (const l of c.lines) { const m = /^([^:]{2,26}):\s+(.+)$/.exec(l); if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); det.append(row); } else det.append(el("div", "line", l)); }
+  box.append(det);
+  const st = el("div", "dstat"), ic = el("span", "ic doing"), status = el("span", "t", "Waiting for your deposit\u2026"); status.id = "depStatus"; st.append(ic, status); box.append(st);
   const total = Math.max(1, c.expiresAt - Date.now()), ttl = el("div", "ttl"), fill = el("i"); ttl.append(fill);
   const close = el("button", "", "Close"); close.type = "button"; close.onclick = hideCard;
   const timer = el("span", "timer", ""); const row = el("div", "row2"); row.append(close, timer); box.append(ttl, row);
-  let n = 0, finished = false, busyPoll = false;
+  let n = 0, finished = false, busyPoll = false, staged = false, view = null;
+  // The moment the deposit is seen, the QR and address go away and the card shows the stages, like a send or a swap.
+  const toStages = () => {
+    staged = true; box.textContent = "";
+    box.append(whoOf("Orbi is bringing it in", "Please keep this open"));
+    const title = el("h2", "", "Bringing in " + (c.amount || "") + " USDC from Base"), f2 = flowOf("Orbi wallet", true, "Your wallet · Base"), ul = el("ul", "stages"), after = el("div");
+    box.append(title, f2, ul, after);
+    const to = f2.querySelector(".node.to"), w = f2.querySelector(".wire"); to.classList.add("receiving");
+    const items = [["Deposit received", "done"], ["Bridging and swapping on NEAR Intents", "doing"], ["NEAR arrives in Orbi's wallet", ""]].map(([label, state]) => { const li = el("li", state), icn = el("span", "ic", state === "done" ? "✓" : ""), t = el("span", "t", label); li.append(icn, t); ul.append(li); return { li, icn }; });
+    const cl = el("button", "", "Close"); cl.type = "button"; cl.onclick = hideCard; const r2 = el("div", "row2"); r2.append(cl); box.append(r2);
+    view = { title, to, w, items, after, box };
+  };
+  const endStages = (okk, j) => {
+    const { title, to, w, items, after, box: b } = view;
+    items.forEach((it, i) => { if (okk) { it.li.className = "done"; it.icn.textContent = "✓"; } else if (i === 1) { it.li.className = "failed"; it.icn.textContent = "✕"; } });
+    to.classList.remove("receiving"); to.classList.add(okk ? "arrived" : "failed"); w.className = "wire " + (okk ? "ok" : "bad"); w.textContent = "";
+    const line = String(j.line || "").replace(/^Done\.\s*/, "");
+    title.textContent = okk ? line.charAt(0).toUpperCase() + line.slice(1) : "Not done"; title.className = okk ? "" : "bad";
+    if (!okk && j.line) after.append(el("div", "bad", j.line));
+    const who = b.querySelector(".who > div"); if (who) { who.children[0].textContent = okk ? "Orbi finished" : "Orbi stopped"; who.children[1].textContent = okk ? "All steps complete" : "See what happened below"; }
+    if (j.txUrl) { const l = el("a", "", "View the transaction"); l.href = j.txUrl; l.target = "_blank"; l.rel = "noopener noreferrer"; after.append(l); }
+  };
   const poll = async () => {
     if (busyPoll || finished) return; busyPoll = true;
     try {
       const j = await (await fetch("/api/deposit-status?session=" + encodeURIComponent(session) + "&id=" + encodeURIComponent(c.id))).json();
-      if (j.line) status.textContent = j.line;
-      if (j.state === "done" || j.state === "refunded" || j.state === "failed" || j.state === "expired") {
-        finished = true; status.className = "line " + (j.state === "done" ? "ok" : "bad");
-        if (j.txUrl) { const l = el("a", "", "View the transaction"); l.href = j.txUrl; l.target = "_blank"; l.rel = "noopener noreferrer"; box.insertBefore(l, ttl); }
+      const over = ["done", "refunded", "failed", "expired"].includes(j.state);
+      if ((j.state === "processing" || j.state === "done") && !staged) toStages();
+      if (!staged && j.line) status.textContent = j.line;
+      if (over) {
+        finished = true; const okk = j.state === "done";
+        if (staged) endStages(okk, j);
+        else { st.className = "dstat bad"; ic.className = "ic failed"; ic.textContent = "✕"; }
         if (!busy) { showOrbi(j.spoken); sayAndSettle(j.spoken, { listen: true }); }
       }
     } catch {} busyPoll = false;
   };
   const tick = () => {
+    if (staged) { if (finished) clearCardTimer(); else if ((n++ % 3) === 2) poll(); return; }
     fill.style.width = Math.max(0, Math.min(100, ((c.expiresAt - Date.now()) / total) * 100)) + "%";
     const left = Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000));
-    timer.textContent = finished ? "" : left > 0 ? `Address valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired";
+    timer.textContent = left > 0 ? `Address valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired";
     if (!left && !finished) poll();
     if (!finished && (n++ % 6) === 5) poll();
     if (finished) clearCardTimer();
