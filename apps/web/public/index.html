@@ -277,7 +277,7 @@
     <label><input type="checkbox" id="wake" checked> <span>Wake word: <b id="wakePhrase" style="font-weight:600;color:var(--text)">Hey Orbi</b>. Detected on this device with openWakeWord; no audio leaves your computer while it waits.</span></label>
     <label><input type="checkbox" id="fast" checked> <span>Fast listening: use the browser's live transcription (quicker; your voice goes to the browser vendor, for example Google in Chrome). Untick for private transcription with Whisper on NEAR AI Cloud.</span></label>
     <label class="sel"><span>How long Orbi waits after you stop talking</span> <select id="wait"><option value="1000">Quick</option><option value="1800" selected>Normal</option><option value="2600">Patient (slow, thoughtful speech)</option></select></label>
-    <label class="sel"><span>Background noise (raise it if Orbi answers TV or people nearby)</span> <select id="noise"><option value="quiet">Quiet room (most sensitive)</option><option value="normal" selected>Normal</option><option value="noisy">Noisy room (strictest)</option></select></label>
+    <label class="sel"><span>Background noise (raise it if Orbi answers TV or people nearby)</span> <select id="noise"><option value="auto" selected>Auto (adapts to the room, best for crowds)</option><option value="quiet">Quiet room (most sensitive)</option><option value="normal">Normal</option><option value="noisy">Noisy room (strictest)</option></select></label>
     <label><input type="checkbox" id="conv" checked> <span>Keep listening after Orbi answers</span></label>
     <label><input type="checkbox" id="vi" checked> <span>Interrupt by voice: start talking while Orbi speaks and it stops and listens (experimental; best with headphones, on speakers Orbi may hear itself)</span></label>
     <label><input type="checkbox" id="bc" checked> <span>Small acknowledgements while I talk ("mm-hmm")</span></label>
@@ -642,13 +642,24 @@ async function ask(text, viaVoice = false, meta = null) {
 let stream = null, lastAck = "";
 // Background noise filter. Orbi only counts sound as YOU talking when it is clearly above the room's noise, for a moment
 // (a door slam or a passing word is not enough), and far-away voices are quieter than yours at the mic.
-const GATE = { quiet: 0.015, normal: 0.028, noisy: 0.05 };
+const GATE = { auto: 0.028, quiet: 0.015, normal: 0.028, noisy: 0.05 };
+// Crowded places: the browser's own noise suppression and voice isolation are asked for, and Orbi keeps a running estimate of how loud
+// the room is even while idle (roomRms: it falls quickly when the room goes quiet and rises slowly, so your own voice barely moves it).
+// Your voice has to be clearly above the room, the wake word gets stricter as the room gets louder, and speech with no real voice at the mic is ignored.
+const MIC = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, voiceIsolation: true } };
+let roomRms = 0.008;
+function wakeLevel() {   // how sure the wake-word model must be, by the room's noise
+  const n = $("noise").value;
+  if (n === "quiet") return 0.32; if (n === "normal") return 0.38; if (n === "noisy") return 0.55;
+  return roomRms > 0.045 ? 0.56 : roomRms > 0.025 ? 0.47 : 0.38;
+}
+const tuneWake = () => { try { if (engine && engine.config) engine.config.detectionThreshold = wakeLevel(); } catch {} };
 const SHORT_OK = /^(yes|yeah|yep|no|nope|okay|ok|sure|thanks|thank you|cancel|stop|go ahead|please|never mind|nevermind|that's all|what|why|how|really|and|continue|repeat that|say that again)$/i;
 const ACKS = ["Mm-hmm.", "Okay.", "Got it.", "Right.", "I see."];
 async function listenOnce(opts = {}) {
   if (recording) return;                                    // allowed while Orbi is busy: a second question gets queued
   try {
-    stream = stream || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+    stream = stream || await navigator.mediaDevices.getUserMedia(MIC);
   } catch { showErr("Microphone not available. You can type instead."); setMode("idle", idleMsg()); return; }
   recording = true; stopWake(); if (isSpeaking()) stopSpeaking();   // talking over Orbi cuts it off
   setMode("listening", opts.followUp ? "Go ahead…" : "Listening…");
@@ -657,7 +668,7 @@ async function listenOnce(opts = {}) {
   const proc = ctx.createScriptProcessor(4096, 1, 1);
   const chunks = [];
   let spoke = false, voicedMs = 0, lastVoice = performance.now(), acks = 0, lastAckAt = 0, ackUntil = 0, ackPlayed = false;
-  let floor = 0.004, loudMs = 0, peak = 0; const confs = [];          // spoke = a real, sustained voice above the room noise
+  let floor = $("noise").value === "quiet" ? 0.004 : Math.max(0.004, roomRms), loudMs = 0, peak = 0; const confs = [];          // spoke = a real, sustained voice above the room noise
   const start = performance.now(), noSpeechLimit = opts.followUp ? 6000 : 8000;
   let finish; const done = new Promise((resolve) => { finish = resolve; });
 
@@ -846,21 +857,29 @@ $("wake").onchange = () => {
 /* ---------------- interrupt by voice (opt-in) ----------------
    While Orbi speaks, watch the microphone. Sustained speech clearly louder than the echo of Orbi's own voice
    stops Orbi and starts listening. The echo level is tracked so Orbi does not interrupt itself. */
-let viCtx = null, viAn = null, viBuf = null, viLeak = 0.01, viHits = 0, viTimer = null;
+let roomTick = 0, viCtx = null, viAn = null, viBuf = null, viLeak = 0.01, viHits = 0, viTimer = null;
 async function viStart() {
   try {
-    stream = stream || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+    stream = stream || await navigator.mediaDevices.getUserMedia(MIC);
   } catch { $("vi").checked = false; showErr("Microphone permission was denied."); return; }
   viCtx = viCtx || new (window.AudioContext || window.webkitAudioContext)();
   const src = viCtx.createMediaStreamSource(stream);
   viAn = viCtx.createAnalyser(); viAn.fftSize = 1024; viBuf = new Float32Array(viAn.fftSize); src.connect(viAn);
   clearInterval(viTimer);
   viTimer = setInterval(() => {
-    if (!$("vi").checked || recording || !isSpeaking()) { viHits = 0; return; }
+    if (!$("vi").checked || recording || !isSpeaking()) {
+      viHits = 0;
+      if (viAn && !recording && !isSpeaking() && viCtx.state === "running") {   // idle: keep learning how loud the room is
+        viAn.getFloatTimeDomainData(viBuf); let q = 0; for (let i = 0; i < viBuf.length; i++) q += viBuf[i] * viBuf[i];
+        const r = Math.sqrt(q / viBuf.length); roomRms += (r - roomRms) * (r < roomRms ? 0.2 : 0.004);
+        if (++roomTick % 12 === 0) tuneWake();
+      }
+      return;
+    }
     if (viCtx.state === "suspended") viCtx.resume().catch(() => {});   // a suspended audio context reads silence, so nothing would ever interrupt
     viAn.getFloatTimeDomainData(viBuf);
     let sum = 0; for (let i = 0; i < viBuf.length; i++) sum += viBuf[i] * viBuf[i];
-    const rms = Math.sqrt(sum / viBuf.length), limit = Math.max(0.035, viLeak * 3);
+    const rms = Math.sqrt(sum / viBuf.length), limit = Math.max(0.035, viLeak * 3, $("noise").value === "quiet" ? 0 : roomRms * 3.5);
     if (rms > limit) viHits++; else { viHits = 0; viLeak += (rms - viLeak) * 0.05; }   // learn the echo level only from non-interruptions
     if (viHits >= 5) { viHits = 0; stopSpeaking(); listenOnce({ followUp: true }); }   // about 0.4 s of real speech
   }, 80);
@@ -872,6 +891,7 @@ window.addEventListener("load", async () => {
 });
 // browsers keep audio paused until the first tap: wake it then
 for (const evn of ["pointerdown", "keydown"]) addEventListener(evn, () => { if (viCtx && viCtx.state === "suspended") viCtx.resume().catch(() => {}); });
+$("noise").onchange = tuneWake;
 $("vi").onchange = () => { if ($("vi").checked) viStart(); else { clearInterval(viTimer); viTimer = null; } };
 
 /* ---------------- controls ---------------- */
