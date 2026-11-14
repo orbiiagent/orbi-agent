@@ -1,0 +1,21 @@
+{
+  "name": "orbi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Orbi: a voice-first assistant that acts on NEAR.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "chat": "node --env-file=.env apps/agent/src/cli.ts",
+    "web": "node --env-file=.env apps/web/server.ts",
+    "start": "node apps/web/server.ts",
+    "test": "node --test \"apps/agent/test/*.test.ts\"",
+    "eval": "node --env-file=.env scripts/model-eval.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "near-api-js": "7.2.0"
+  }
+}

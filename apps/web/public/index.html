@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Orbi</title>
+<style>
+  :root {
+    --bg: #05070c; --text: #eef2fa; --dim: #8b95a9; --faint: #5a6479;
+    --line: rgba(255, 255, 255, .08); --line2: rgba(255, 255, 255, .15);
+    --accent: #7aa2ff; --accent2: #a48bff; --ok: #6ee7b7; --warn: #f5c26b; --bad: #ff8f8f;
+    --glow: 70, 110, 255;
+  }
+  body[data-mode=listening] { --glow: 40, 170, 255; }
+  body[data-mode=thinking]  { --glow: 130, 90, 255; }
+  body[data-mode=speaking]  { --glow: 120, 170, 255; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; color: var(--text); overflow: hidden; background: var(--bg); }
+  body {
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: -.005em;
+    display: flex; flex-direction: column; height: 100dvh; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
+    background:
+      radial-gradient(900px 520px at 20% 6%, rgba(80, 110, 255, .14), transparent 62%),
+      radial-gradient(800px 560px at 90% 100%, rgba(150, 100, 255, .10), transparent 60%),
+      var(--bg);
+  }
+  button { font-family: inherit; }
+
+  /* header */
+  .top { width: 100%; max-width: 1240px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 0 6px; min-height: 52px; gap: 12px; }
+  .brandwrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo { width: 22px; height: 22px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 30%, #fff, #a9c0ff 38%, #5b7bff 78%); box-shadow: 0 0 18px rgba(var(--glow), .6); transition: box-shadow .6s; }
+  .brand { font-weight: 650; letter-spacing: .01em; font-size: 18px; }
+  .tagline { color: var(--dim); font-size: 13px; padding-left: 12px; margin-left: 2px; border-left: 1px solid var(--line2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 640px) { .tagline { display: none; } .top { padding-top: 12px; } }
+  .pills { display: flex; gap: 8px; align-items: center; flex: none; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--dim); border: 1px solid var(--line); background: rgba(255, 255, 255, .04); border-radius: 999px; padding: 4px 11px; white-space: nowrap; }
+  .demoBanner { margin: 0 16px; padding: 7px 14px; border: 1px solid rgba(245, 194, 107, .45); background: rgba(245, 194, 107, .08); color: var(--warn); border-radius: 12px; font-size: 12.5px; line-height: 1.4; text-align: center; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px rgba(110, 231, 183, .7); }
+  .pill.bad .dot { background: var(--warn); box-shadow: 0 0 8px rgba(245, 194, 107, .7); }
+  .mode { color: var(--warn); border-color: rgba(245, 194, 107, .3); background: rgba(245, 194, 107, .07); }
+  .mode.live { color: #ffb4b4; border-color: rgba(255, 120, 120, .4); background: rgba(255, 120, 120, .08); }
+
+  /* layout: Orbi sits in the center. On wide screens a card slides in beside it; on phones it stacks below. */
+  .layout { flex: 1; min-height: 0; width: 100%; max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 16px; }
+  body.hasCard .layout { grid-template-rows: minmax(0, 1fr) auto; }
+  /* wide screens: the card is a real second column. The orb and the text slide over to make room, then slide back. */
+  @media (min-width: 900px) {
+    .layout, body.hasCard .layout { grid-template-columns: minmax(0, 1fr) 0px; grid-template-rows: minmax(0, 1fr); gap: 0; align-items: stretch; overflow: hidden; transition: grid-template-columns .5s cubic-bezier(.2, .8, .2, 1), column-gap .5s cubic-bezier(.2, .8, .2, 1); }
+    body.hasCard .layout { grid-template-columns: minmax(0, 1fr) 410px; column-gap: 28px; }
+  }
+  .stage { position: relative; min-height: 0; }
+  .stage > * { position: absolute; z-index: 1; max-width: 100%; min-width: 0; }
+  #orbBtn { left: 50%; top: 50%; translate: -50% -50%; scale: var(--fit, 1); transition: scale .4s cubic-bezier(.2, .8, .2, 1); max-width: none; }   /* the canvas may be wider than a phone: only its transparent glow overflows */             /* Orbi: the exact middle of the page */
+  .say { left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  /* phone with a card open: stack Orbi (smaller) and the text above the card instead of overlaying them */
+  @media (max-width: 899px) {
+    body.hasCard .stage { display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 8px; overflow-y: auto; }
+    body.hasCard .stage > * { position: relative; flex-shrink: 0; }
+    body.hasCard #orbBtn { left: auto; top: auto; translate: none; scale: 1; }
+    body.hasCard .say { left: auto; right: auto; bottom: auto; }
+  }
+  .stage::before { content: ""; position: absolute; left: 50%; top: 50%; width: min(760px, 100%); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(var(--glow), .24), transparent 66%); filter: blur(28px); pointer-events: none; z-index: 0; transition: background .7s; }
+  #cOrbi, #cUser { overflow-wrap: anywhere; }
+
+  #orbBtn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; line-height: 0; -webkit-tap-highlight-color: transparent; }
+  #orbBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 8px; }
+  canvas { display: block; }
+  #toasts { position: fixed; z-index: 40; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; max-width: min(330px, calc(100vw - 24px)); pointer-events: none; }
+  #toasts > * { pointer-events: auto; }
+  .toast, #aiNote { padding: 10px 14px; border-radius: 14px; font-size: 12.5px; line-height: 1.4; backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+  #aiNote { color: #ffdca8; background: rgba(30, 22, 8, .86); border: 1px solid rgba(245, 194, 107, .35); }
+  .toast.err { color: #ffc4c4; background: rgba(40, 12, 14, .88); border: 1px solid rgba(255, 120, 120, .4); cursor: pointer; }
+  .toast.err::after { content: "  ×"; color: rgba(255, 196, 196, .6); }
+  @media (max-width: 899px) { #toasts { right: 12px; bottom: auto; top: 58px; } }   /* phones: lower right is where the reply text is, so they sit under the header */
+  #aiNote[hidden] { display: none; }
+  #state { min-height: 22px; font-size: 13.5px; color: var(--dim); text-align: center; }
+  #state:not(:empty)::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; background: rgb(var(--glow)); box-shadow: 0 0 9px rgba(var(--glow), .9); transition: background .5s; }
+  #caption { width: 100%; max-width: 620px; min-height: 64px; text-align: center; padding: 0 6px; }
+  #cUser { color: var(--dim); font-size: 14.5px; min-height: 22px; font-style: italic; }
+  #cOrbi { color: var(--text); font-size: 21px; font-weight: 500; line-height: 1.38; margin-top: 6px; letter-spacing: -.012em; }
+  .captionsOff #caption { visibility: hidden; }
+  #checked { font: 11.5px ui-monospace, Menlo, monospace; color: var(--faint); text-align: center; }
+  #checked:empty { display: none; }
+
+  /* approval card */
+  #card { max-height: 56dvh; overflow-y: auto; overflow-x: hidden; background: linear-gradient(180deg, rgba(26, 32, 50, .85), rgba(14, 18, 28, .85)); border: 1px solid var(--line2); border-radius: 22px; padding: 20px; text-align: left; backdrop-filter: blur(16px); box-shadow: 0 22px 60px rgba(0, 0, 0, .5); }
+  #card[hidden] { display: none; }
+  #card:not([hidden]) { animation: cardIn .4s cubic-bezier(.2, .8, .2, 1); }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (min-width: 900px) {
+    #card { width: 410px; align-self: center; max-height: calc(100dvh - 150px); }
+    #card:not([hidden]) { animation: none; }
+  }
+  #card.live { border-color: rgba(255, 120, 120, .45); box-shadow: 0 0 0 1px rgba(255, 120, 120, .12), 0 22px 60px rgba(0, 0, 0, .5); }
+  #card .tag { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--warn); background: rgba(245, 194, 107, .1); border: 1px solid rgba(245, 194, 107, .3); border-radius: 999px; padding: 4px 11px; margin-bottom: 12px; }
+  #card.live .tag { color: #ffb4b4; background: rgba(255, 120, 120, .1); border-color: rgba(255, 120, 120, .38); }
+  #card h2 { font-size: 22px; line-height: 1.25; margin: 0 0 14px; font-weight: 650; letter-spacing: -.015em; }
+  #card .kv { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  #card .kv .k { color: var(--dim); flex: none; }
+  #card .kv .v { text-align: right; color: var(--text); overflow-wrap: anywhere; }
+  #card .line { color: var(--dim); font-size: 14px; padding: 8px 0; border-top: 1px solid var(--line); }
+  #card .addr { margin: 12px 0; padding: 12px 14px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line2); border-radius: 14px; }
+  #card .addr .k { display: block; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .09em; margin-bottom: 6px; }
+  #card .addr code { font: 14px/1.55 ui-monospace, Menlo, monospace; color: var(--text); word-break: break-all; }
+  #card .warn { color: var(--warn); font-size: 13px; padding: 9px 12px; margin: 6px 0; border-left: 3px solid var(--warn); background: rgba(245, 194, 107, .07); border-radius: 0 10px 10px 0; }
+  #card .ok { color: var(--ok); font-size: 15px; padding: 3px 0; }
+  #card .bad { color: var(--bad); font-size: 14px; padding: 3px 0; }
+  #card h2.ok { color: var(--ok); } #card h2.bad { color: var(--bad); }
+  #card .badge { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+  #card .badge.ok { background: rgba(110, 231, 183, .13); color: var(--ok); border: 1px solid rgba(110, 231, 183, .4); }
+  #card .badge.bad { background: rgba(255, 143, 143, .12); color: var(--bad); border: 1px solid rgba(255, 143, 143, .4); }
+  #card .ttl { height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; margin: 14px 0 0; }
+  #card .ttl i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 1s linear; }
+  /* the Approve row stays in view while a tall card scrolls, with a solid background so text never shows through it */
+  #card .qr { margin: 12px 0 0; text-align: center; }
+  #card .qr img { width: 176px; height: 176px; image-rendering: pixelated; border-radius: 10px; background: #fff; }
+  #card .qrnote { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  #card .cp { margin-top: 10px; }
+  #card .cp button { padding: 8px 16px; }
+  #card .row2 { display: flex; gap: 10px; align-items: center; margin: 14px -20px -20px; padding: 12px 20px 18px; flex-wrap: wrap; position: sticky; bottom: -20px; background: linear-gradient(180deg, rgba(14, 18, 28, 0), #0e121c 14px); border-radius: 0 0 22px 22px; }
+  #card button { min-height: 46px; padding: 0 22px; border-radius: 14px; font-weight: 600; font-size: 15px; cursor: pointer; border: 1px solid var(--line2); background: rgba(255, 255, 255, .04); color: var(--text); transition: transform .12s, background .2s; }
+  #card button:hover:not(:disabled) { background: rgba(255, 255, 255, .09); }
+  #card button.go { flex: 1; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #08101f; border: 0; }
+  #card button.go:hover:not(:disabled) { transform: translateY(-1px); background: linear-gradient(135deg, #8fb0ff, #b39eff); }
+  #card button:disabled { opacity: .45; cursor: default; }
+  #card .timer { width: 100%; font-size: 12px; color: var(--dim); }
+  #card a { color: #9db8ff; font: 13px ui-monospace, Menlo, monospace; word-break: break-all; }
+
+  /* bottom dock */
+  .bottom { width: 100%; max-width: 1240px; margin: 0 auto; padding: 8px 0 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #typeRow { display: none; width: 100%; max-width: 620px; gap: 8px; }
+  #typeRow.open { display: flex; }
+  #typeRow input { flex: 1; min-width: 0; background: rgba(255, 255, 255, .05); color: var(--text); border: 1px solid var(--line2); border-radius: 14px; padding: 13px 16px; font: inherit; }
+  #typeRow input:focus { outline: none; border-color: rgba(122, 162, 255, .6); }
+  #typeRow button { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #08101f; font-weight: 600; border: 0; border-radius: 14px; padding: 0 20px; cursor: pointer; }
+  .bar { display: flex; gap: 4px; padding: 4px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); backdrop-filter: blur(10px); }
+  .tb { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 0; color: var(--dim); border-radius: 999px; padding: 8px 16px; font-size: 13.5px; cursor: pointer; transition: color .2s, background .2s; }
+  .tb svg { width: 16px; height: 16px; flex: none; }
+  .tb:hover, .tb:focus-visible { color: var(--text); background: rgba(255, 255, 255, .06); outline: none; }
+  .tb[aria-pressed=true] { color: var(--text); background: rgba(122, 162, 255, .16); }
+
+  /* settings */
+  #settings { display: none; position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 30; width: min(580px, calc(100vw - 24px)); max-height: min(74dvh, 680px); overflow-y: auto; overflow-x: hidden; border: 1px solid var(--line2); border-radius: 22px; padding: 16px 18px 18px; background: rgba(10, 13, 21, .96); backdrop-filter: blur(18px); color: var(--dim); font-size: 14px; box-shadow: 0 24px 80px rgba(0, 0, 0, .75); }
+  #settings.open { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+  #settings > * { min-width: 0; }
+  #settingsHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  #settingsHead b { color: var(--text); font-size: 17px; font-weight: 650; }
+  #settingsHead .tb { border: 1px solid var(--line); }
+  #settings h4 { margin: 12px 0 2px; font-size: 11px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  #settings label { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 9px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; line-height: 1.45; cursor: pointer; }
+  #settings label:first-of-type { border-top: 0; }
+  #settings input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; width: 38px; height: 22px; margin: 1px 0 0; border-radius: 999px; background: rgba(255, 255, 255, .14); position: relative; cursor: pointer; transition: background .2s; }
+  #settings input[type=checkbox]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  #settings input[type=checkbox]:checked { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  #settings input[type=checkbox]:checked::after { transform: translateX(16px); }
+  #settings input[type=checkbox]:focus-visible, #settings select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #settings label.sel { flex-direction: row; align-items: center; }
+  #settings select { background: rgba(255, 255, 255, .06); color: var(--text); border: 1px solid var(--line2); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; max-width: 55%; }
+  #settings select option { background: #0e121b; }
+  #settings small { color: var(--faint); display: block; margin-top: 10px; line-height: 1.5; }
+  @media (max-height: 640px) { #cOrbi { font-size: 17px; }  }
+
+  #contacts { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
+  #contacts .c { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 14px; min-width: 0; color: var(--text); }
+  #contacts .c strong { flex-shrink: 0; font-weight: 600; }
+  #contacts .c button { flex-shrink: 0; }
+  #contacts .c span.a { color: var(--faint); font: 12px ui-monospace, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  #contacts form { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  #contacts input[type=text] { background: rgba(255, 255, 255, .05); color: var(--text); border: 1px solid var(--line2); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 13px; min-width: 0; }
+  #contacts input[type=text]:focus { outline: none; border-color: rgba(122, 162, 255, .6); }
+  #contacts input[name=name] { width: 110px; } #contacts input[name=address] { flex: 1; min-width: 150px; }
+  #contacts button { background: rgba(255, 255, 255, .08); color: var(--text); border: 0; border-radius: 10px; padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; }
+  #contacts button:hover { background: rgba(255, 255, 255, .14); }
+  #contactMsg { font-size: 12px; color: var(--warn); min-height: 16px; margin-top: 4px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brandwrap"><span class="logo" aria-hidden="true"></span><span class="brand">Orbi</span><span class="tagline">Your voice assistant for NEAR</span></div>
+  <div class="pills">
+    <span class="pill" id="aiPill" title="Status of the AI service Orbi relies on"><span class="dot"></span><span id="aiPillText">AI online</span></span>
+    <span class="pill mode" id="mode">read-only</span>
+  </div>
+</header>
+<div id="demoBanner" class="demoBanner" role="note" hidden></div>
+
+<main class="layout">
+  <section class="stage" id="stage">
+    <button id="orbBtn" aria-label="Talk to Orbi. Tap to start or stop listening, or to interrupt Orbi."><canvas id="orb"></canvas></button>
+    <div class="say" id="say">
+      <div id="state" role="status" aria-live="polite"></div>
+      <div id="caption" aria-live="polite">
+        <div id="cUser"></div>
+        <div id="cOrbi"></div>
+      </div>
+      <div id="checked"></div>
+    </div>
+  </section>
+
+  <section id="card" hidden role="region" aria-label="Approval card" aria-live="polite"></section>
+</main>
+
+<div class="bottom">
+  <form id="typeRow" autocomplete="off">
+    <input type="text" id="text" placeholder="Type a question" aria-label="Type a question">
+    <button type="submit">Send</button>
+  </form>
+  <div id="settings" role="dialog" aria-label="Settings">
+    <div id="settingsHead"><b>Settings</b><button class="tb" id="setClose" type="button">Close</button></div>
+    <h4>Listening</h4>
+    <label><input type="checkbox" id="wake"> <span>Wake word: <b id="wakePhrase" style="font-weight:600;color:var(--text)">Hey Orbi</b>. Detected on this device with openWakeWord; no audio leaves your computer while it waits.</span></label>
+    <label><input type="checkbox" id="fast" checked> <span>Fast listening: use the browser's live transcription (quicker; your voice goes to the browser vendor, for example Google in Chrome). Untick for private transcription with Whisper on NEAR AI Cloud.</span></label>
+    <label class="sel"><span>How long Orbi waits after you stop talking</span> <select id="wait"><option value="1000">Quick</option><option value="1800" selected>Normal</option><option value="2600">Patient (slow, thoughtful speech)</option></select></label>
+    <label class="sel"><span>Background noise (raise it if Orbi answers TV or people nearby)</span> <select id="noise"><option value="quiet">Quiet room (most sensitive)</option><option value="normal" selected>Normal</option><option value="noisy">Noisy room (strictest)</option></select></label>
+    <label><input type="checkbox" id="conv" checked> <span>Keep listening after Orbi answers</span></label>
+    <label><input type="checkbox" id="vi"> <span>Interrupt by voice: start talking while Orbi speaks and it stops and listens (experimental; best with headphones, on speakers Orbi may hear itself)</span></label>
+    <label><input type="checkbox" id="bc" checked> <span>Small acknowledgements while I talk ("mm-hmm")</span></label>
+    <h4>Voice</h4>
+    <label><input type="checkbox" id="ts" checked> <span>Say "hmm…" in Bella's voice while Orbi thinks, instead of silence</span></label>
+    <label><input type="checkbox" id="cap" checked> <span>Show captions</span></label>
+    <label><input type="checkbox" id="mute"> <span>Mute Orbi's voice</span></label>
+    <label><input type="checkbox" id="bk"> <span>If Bella's voice is unavailable, use the browser's robotic voice instead of staying silent</span></label>
+    <h4>Contacts</h4>
+    <div id="contacts">
+      <span style="color:var(--faint)">Say "send 1 NEAR to Mom". Addresses are never taken by voice: paste them here.</span>
+      <div id="contactList"></div>
+      <form id="contactForm" autocomplete="off"><input type="text" name="name" placeholder="Name" aria-label="Contact name"><input type="text" name="address" placeholder="NEAR address" aria-label="Contact address"><button type="submit">Add</button></form>
+      <div id="contactMsg" role="status"></div>
+    </div>
+    <h4>Bridge</h4>
+    <div id="bridge">
+      <span style="color:var(--faint)">To bring USDC in from Base, say "bring in 10 USDC from Base". Orbi shows an address on a card and you send the USDC yourself. If a deposit can't complete, it is refunded to the Base address below: use a wallet you control, not an exchange deposit address.</span>
+      <form id="bridgeForm" autocomplete="off"><input type="text" name="refund" placeholder="Your Base address (0x…) for refunds" aria-label="Your Base address for refunds"><button type="submit">Save</button></form>
+      <div id="bridgeMsg" role="status"></div>
+    </div>
+    <small>Swaps and sends only happen when you tap Approve on the card; saying "yes" does nothing. In rehearsal mode nothing is signed or sent. Read-only lookups: Orbi researches rates, prices and swap quotes and cannot move money. Rates are variable and not financial advice.</small>
+  </div>
+  <div class="bar">
+    <button class="tb" id="typeBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Type</button>
+    <button class="tb" id="setBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Settings</button>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"><div id="aiNote" role="status" hidden></div></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const session = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let busy = false, recording = false, speaking = false, mode = "idle";
+let micLevel = 0, speakPulse = 0;
+
+/* ---------------- the orb ---------------- */
+const cv = $("orb"), g = cv.getContext("2d");
+let size = 300;
+function resize() {
+  // The card floats beside the orb on wide screens, so the orb only shrinks when the card is stacked below it (phones).
+  const narrow = innerWidth < 900, compact = narrow && document.body.classList.contains("hasCard");
+  const stageW = ($("stage") && $("stage").clientWidth) || innerWidth, stageH = ($("stage") && $("stage").clientHeight) || innerHeight;
+  if (compact) size = Math.max(110, Math.min(stageW - 32, innerHeight * 0.22, 180));
+  else {
+    // The resting orb is about 0.54 of the canvas wide, but it swells to about 0.74 when Orbi is loud, so leave room for the
+    // swell between the orb and the text block (about 116px) at the bottom: they must never touch. (The swell is also capped in frame().)
+    const TEXT_H = 116;
+    size = Math.max(200, Math.min((stageW - 24) / 0.62, (stageH / 2 - TEXT_H - 12) / 0.40, 860));
+  }
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = cv.style.height = size + "px";
+  cv.width = cv.height = Math.round(size * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (typeof fitOrb === "function") fitOrb();
+}
+// If a long reply makes the text block tall, shrink the orb smoothly (a CSS scale) so its swell never reaches the text.
+function fitOrb() {
+  const st = $("stage"), say = $("say"), btn = $("orbBtn");
+  if (!st || !say || !btn) return;
+  const stacked = innerWidth < 900 && document.body.classList.contains("hasCard");
+  if (stacked) { btn.style.setProperty("--fit", 1); return; }
+  const stageH = st.clientHeight, room = stageH - say.offsetHeight - stageH / 2 - 14, need = 0.40 * size;
+  btn.style.setProperty("--fit", Math.max(0.45, Math.min(1, room / need)).toFixed(3));
+}
+addEventListener("resize", resize); resize();
+if (window.ResizeObserver) { const ro = new ResizeObserver(() => { resize(); fitOrb(); }); ro.observe($("stage")); ro.observe($("say")); }   // the stage resizes while the card slides in
+
+const PALETTE = {          // [core, edge] rgb per mode
+  idle:      [[170, 200, 255], [70, 110, 255]],
+  listening: [[150, 245, 255], [40, 170, 255]],
+  thinking:  [[205, 180, 255], [120, 80, 255]],
+  speaking:  [[255, 255, 255], [110, 160, 255]],
+};
+let col = JSON.parse(JSON.stringify(PALETTE.idle));
+let level = 0, ack = 0, spin = 0;
+
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const t = ts / 1000, damp = reduceMotion ? 0.25 : 1;
+  let target;
+  if (mode === "listening") target = micLevel;
+  else if (mode === "speaking") target = 0.14 + voiceLevel * 0.9 + speakPulse * 0.55 + 0.04 * Math.sin(t * 8);
+  else if (mode === "thinking") target = 0.10 + 0.05 * Math.sin(t * 3);
+  else target = 0.04 + 0.025 * Math.sin(t * 1.3);
+  target = Math.min(target, 0.5);   // keep the biggest swell inside the space around the orb
+  level += (target - level) * 0.2;
+  speakPulse *= 0.9; ack *= 0.94;
+  spin += (mode === "thinking" ? 0.035 : 0.006) * damp;
+  const want = PALETTE[mode] || PALETTE.idle;
+  for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) col[i][k] += (want[i][k] - col[i][k]) * 0.06;
+
+  const c = size / 2, R = size * (0.27 + level * 0.07 + ack * 0.03);
+  g.clearRect(0, 0, size, size);
+  g.globalCompositeOperation = "lighter";
+  const layers = [
+    { amp: 1.0, ph: 0.0, sp: 0.7, a: 0.30 },
+    { amp: 0.8, ph: 2.1, sp: -0.9, a: 0.26 },
+    { amp: 0.6, ph: 4.2, sp: 1.2, a: 0.22 },
+  ];
+  for (const L of layers) {
+    g.beginPath();
+    const wob = (0.025 + level * 0.55) * L.amp * damp;
+    for (let i = 0; i <= 96; i++) {
+      const th = (i / 96) * Math.PI * 2;
+      const r = R * (1 + wob * (
+        Math.sin(2 * th + L.ph + t * L.sp + spin) * 0.6 +
+        Math.sin(3 * th - L.ph + t * L.sp * 1.3) * 0.4 +
+        Math.sin(5 * th + t * L.sp * 1.9 + spin * 2) * 0.25));
+      const x = c + Math.cos(th) * r, y = c + Math.sin(th) * r;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.closePath();
+    const gr = g.createRadialGradient(c - R * 0.25, c - R * 0.3, R * 0.1, c, c, R * 1.35);
+    gr.addColorStop(0, `rgba(${col[0].map(Math.round)},${L.a + 0.25})`);
+    gr.addColorStop(1, `rgba(${col[1].map(Math.round)},0)`);
+    g.fillStyle = gr; g.fill();
+  }
+  const core = g.createRadialGradient(c - R * 0.2, c - R * 0.25, 0, c, c, R * 0.95);
+  core.addColorStop(0, `rgba(${col[0].map(Math.round)},0.95)`);
+  core.addColorStop(0.6, `rgba(${col[1].map(Math.round)},0.55)`);
+  core.addColorStop(1, `rgba(${col[1].map(Math.round)},0)`);
+  g.fillStyle = core; g.beginPath(); g.arc(c, c, R * 0.98, 0, Math.PI * 2); g.fill();
+  g.globalCompositeOperation = "source-over";
+}
+requestAnimationFrame(frame);
+
+function setMode(m, msg) { mode = m; document.body.dataset.mode = m; $("state").textContent = msg ?? ""; }
+let WAKE_PHRASE = "Hey Orbi";
+let awaitingTap = false;   // an approval card is open and waiting for the owner: Orbi stays quiet and does not listen on its own
+const idleMsg = () => awaitingTap ? "Take a look at the card, then tap Approve or Cancel" : ($("wake").checked ? `Say "${WAKE_PHRASE}" or tap the orb` : "Tap the orb to talk");
+
+/* ---------------- captions ---------------- */
+function showUser(t) { $("cUser").textContent = t ? `“${t}”` : ""; }
+function showOrbi(t) { $("cOrbi").textContent = t; }
+let errTimer = null;
+function showErr(t) {                       // every problem shows as a small notice in the lower-right corner, never in the middle of the page
+  let e = $("errToast");
+  if (!t) { if (e) e.remove(); return; }
+  if (!e) { e = document.createElement("div"); e.id = "errToast"; e.className = "toast err"; e.title = "Click to dismiss"; e.onclick = () => e.remove(); $("toasts").append(e); }
+  e.firstChild ? (e.firstChild.nodeValue = t) : e.append(document.createTextNode(t));
+  clearTimeout(errTimer); errTimer = setTimeout(() => { const x = $("errToast"); if (x) x.remove(); }, 10000);
+}
+
+/* ---------------- speaking ---------------- */
+function pickVoice() {
+  const v = speechSynthesis.getVoices();
+  return v.find((x) => /en[-_](US|GB)/i.test(x.lang) && /Samantha|Google|Natural|Aria|Jenny|Ava|Allison/i.test(x.name)) || v.find((x) => /^en/i.test(x.lang)) || null;
+}
+function sayBrowser(text, opts = {}) {
+  return new Promise((resolve) => {
+    if ($("mute").checked || !("speechSynthesis" in window)) return resolve();
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/[*_`#]/g, ""));
+    u.voice = pickVoice(); u.rate = opts.rate ?? 1.05; u.volume = opts.volume ?? 1;
+    u.onstart = () => { if (!opts.quiet) { speaking = true; setMode("speaking", "Orbi is speaking · tap to interrupt or ask something"); } };
+    u.onboundary = () => { if (!opts.quiet) speakPulse = 1; };
+    u.onend = u.onerror = () => { if (!opts.quiet) speaking = false; resolve(); };
+    speechSynthesis.speak(u);
+  });
+}
+
+/* ---------------- Orbi's voice: ElevenLabs through the server, browser voice as fallback ---------------- */
+let voiceMode = "browser", voiceLevel = 0, speakToken = 0, pendingResolve = null;
+const audioEl = new Audio(); audioEl.preload = "auto";
+let actx = null, analyser = null, abuf = null;
+function ensureAudio() {
+  if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = actx.createMediaElementSource(audioEl);
+  analyser = actx.createAnalyser(); analyser.fftSize = 512; abuf = new Uint8Array(analyser.fftSize);
+  src.connect(analyser); analyser.connect(actx.destination);
+}
+(function meter() {                       // the orb follows the real loudness of the voice
+  if (analyser && !audioEl.paused) {
+    analyser.getByteTimeDomainData(abuf);
+    let s = 0; for (let i = 0; i < abuf.length; i++) { const v = (abuf[i] - 128) / 128; s += v * v; }
+    voiceLevel += (Math.min(1, Math.sqrt(s / abuf.length) * 5) - voiceLevel) * 0.4;
+  } else voiceLevel *= 0.85;
+  requestAnimationFrame(meter);
+})();
+const clipCache = new Map();              // short phrases (acknowledgements) kept ready
+// low = background prefetch (the server serves real answers first). Retries once if the voice service was busy.
+function fetchClip(text, previous, next, low = false) {
+  const once = async () => {
+    const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, previous, next, low }) });
+    if (!r.ok) { const e = new Error("voice " + r.status); e.status = r.status; throw e; }
+    return URL.createObjectURL(await r.blob());
+  };
+  const p = once().catch(async (e) => {
+    if ([429, 502, 503].includes(e.status)) { await new Promise((r) => setTimeout(r, 700)); return once(); }
+    throw e;
+  });
+  p.catch(() => {});
+  return p;
+}
+const backupVoice = () => $("bk").checked;           // the robotic browser voice only speaks if the user allows it
+let hiccupShown = 0;
+function voiceHiccup(e) {
+  const now = Date.now();
+  if (now - hiccupShown < 8000) return; hiccupShown = now;
+  showErr(e.status === 402 ? "Bella's voice credits are used up. Showing text only." : "Bella's voice hit a snag. Showing text for that part.");
+}
+function playClip(url, volume, token) {
+  return new Promise((resolve) => {
+    if (token !== speakToken) return resolve();
+    pendingResolve = resolve;
+    audioEl.volume = volume; audioEl.src = url;
+    audioEl.onended = audioEl.onerror = () => resolve();
+    audioEl.onplaying = () => { if (!turnT.firstAudio) turnT.firstAudio = performance.now(); };
+    audioEl.play().catch(() => resolve());
+  });
+}
+function splitSentences(t) {              // sentence by sentence: the first one starts playing sooner
+  const m = t.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [t];
+  const out = [];
+  for (const s of m.map((x) => x.trim()).filter(Boolean)) {
+    if (out.length && out[out.length - 1].length < 40) out[out.length - 1] += " " + s; else out.push(s);
+  }
+  return out.slice(0, 5);
+}
+async function sayEleven(text, opts) {
+  ensureAudio();
+  const token = opts.quiet ? speakToken : ++speakToken;
+  const parts = opts.quiet ? [text] : splitSentences(text);
+  // start every sentence's request at once; each gets its neighbours so intonation flows (questions rise, etc.)
+  const clips = parts.map((p, i) => clipCache.get(p) || fetchClip(p, parts.slice(0, i).join(" ") || opts.context, parts.slice(i + 1).join(" ")));
+  if (!opts.quiet) { speaking = true; setMode("speaking", "Orbi is speaking · tap to interrupt or ask something"); }
+  try {
+    for (const c of clips) {
+      const url = await c;
+      if (token !== speakToken) break;
+      await playClip(url, opts.volume ?? 1, token);
+    }
+  } finally { if (!opts.quiet && token === speakToken) speaking = false; }
+}
+function say(text, opts = {}) {
+  if ($("mute").checked) return Promise.resolve();
+  if (voiceMode === "elevenlabs")
+    return sayEleven(text, opts).catch((e) => {
+      if ([401, 403, 501].includes(e.status)) { voiceMode = "browser"; return sayBrowser(text, opts); }   // no usable key: nothing else to use
+      voiceHiccup(e);
+      return backupVoice() && !opts.quiet ? sayBrowser(text, opts) : undefined;                            // never a robotic acknowledgement
+    });
+  return sayBrowser(text, opts);
+}
+function stopSpeaking() {
+  speakToken++; try { audioEl.pause(); } catch {}
+  if (pendingResolve) { pendingResolve(); pendingResolve = null; }
+  speechSynthesis.cancel(); speaking = false;
+}
+const isSpeaking = () => speaking || speechSynthesis.speaking || !audioEl.paused;
+
+/* A speaker plays one turn's sentences in order. Each sentence is requested the moment it arrives,
+   so the first one can start while the model is still writing the rest. */
+// Short human "thinking" sounds in Bella's voice. They are prefetched (and cached on the server's disk), played only if
+// already loaded, at most twice per turn, and never after the real answer has started, so they never delay it.
+const HMMS = ["Hmm…", "Hmm, let me think.", "Let's see…", "Okay, hmm."];
+function makeSpeaker(context) {
+  const token = ++speakToken;
+  let chain = Promise.resolve(), spoken = "", any = false, begun = false, fillers = 0;
+  function enqueue(text, getClip, isFiller = false) {
+    if (!isFiller) any = true;
+    const p = voiceMode === "elevenlabs" ? getClip() : null;
+    chain = chain.then(async () => {
+      while (recording && token === speakToken) await new Promise((r) => setTimeout(r, 120));   // the owner is talking: hold the answer until they finish
+      if (token !== speakToken || $("mute").checked || awaitingTap) return;
+      if (!begun) { begun = true; speaking = true; setMode("speaking", "Orbi is speaking · tap to interrupt or ask something"); }
+      if (p) {
+        try { await playClip(await p, 1, token); return; }
+        catch (e) {
+          if ([401, 403, 501].includes(e.status)) voiceMode = "browser";      // key problem: no way to use Bella
+          else { voiceHiccup(e); if (!backupVoice()) return; }                 // transient: skip this clip, keep Bella for the next one
+        }
+      }
+      if (token === speakToken) await sayBrowser(text, {});
+    });
+  }
+  return {
+    get any() { return any; },
+    sentence(t) { const prev = spoken; spoken += (spoken ? " " : "") + t; enqueue(t, () => clipCache.get(t) || fetchClip(t, prev || context)); },
+    filler() {                                           // a short natural "hmm" while Orbi works on the answer
+      if (any || awaitingTap || fillers >= 2 || voiceMode !== "elevenlabs" || !$("ts").checked || $("mute").checked) return;
+      const ready = HMMS.filter((h) => clipCache.has(h) && !spoken.includes(h));
+      if (!ready.length) return;                         // not loaded yet: stay quiet rather than delay the answer
+      const f = ready[Math.floor(Math.random() * ready.length)];
+      fillers++; spoken += (spoken ? " " : "") + f;
+      enqueue(f, () => clipCache.get(f), true);
+    },
+    async finish() { await chain; if (token === speakToken) speaking = false; },
+  };
+}
+
+/* ---------------- conversation ---------------- */
+const turnT = { sent: 0, firstSentence: 0, firstAudio: 0 };   // stage timings for the status line
+const queued = [];                        // questions asked while Orbi was still answering: answered in order, one after the other
+let stopHmm = () => {};
+async function ask(text, viaVoice = false, meta = null) {
+  if (busy) {
+    if (queued.length >= 3) { showErr("One thing at a time, I'll catch up first."); return; }
+    queued.push({ text, viaVoice, meta });
+    setMode(mode === "speaking" ? "speaking" : "thinking", `Got it. I'll answer “${text.length > 40 ? text.slice(0, 40) + "…" : text}” next.`);
+    return;
+  }
+  busy = true; stopWake(); showErr(""); showUser(text); showOrbi("");
+  setMode("thinking", "Thinking…");
+  try {
+    ensureAudio();
+    const speaker = makeSpeaker(text);
+    const hmmTimers = [setTimeout(() => speaker.filler(), 800), setTimeout(() => speaker.filler(), 6000)];   // only if still waiting
+    stopHmm = () => hmmTimers.forEach(clearTimeout);
+    turnT.sent = performance.now(); turnT.firstSentence = 0; turnT.firstAudio = 0;
+    const tools = []; let shown = "", reply = "";
+    try {
+      const r = await fetch("/api/chat-stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, text }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Request failed"); }
+      const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
+          const ev = JSON.parse(line);
+          if (ev.type === "tool_start") speaker.filler();                       // only when a lookup is really running
+          else if (ev.type === "tool") tools.push(ev);
+          else if (ev.type === "sentence") { if (!turnT.firstSentence) turnT.firstSentence = performance.now(); shown += (shown ? " " : "") + ev.text; showOrbi(shown); speaker.sentence(ev.text); }
+          else if (ev.type === "action") showCard(ev.card);
+          else if (ev.type === "done") reply = ev.reply;
+          else if (ev.type === "error") throw new Error(ev.message);
+        }
+      }
+      if (!shown && reply) { showOrbi(reply); speaker.sentence(reply); }
+      const sec = (ms) => (ms / 1000).toFixed(1) + "s";
+      const bits = [];
+      if (meta && meta.heardMs != null) bits.push(`heard ${sec(meta.heardMs)} (${meta.via})`);
+      if (turnT.firstSentence) bits.push(`answer ${sec(turnT.firstSentence - turnT.sent)}`);
+      if (turnT.firstAudio && turnT.firstSentence) bits.push(`voice +${sec(Math.max(0, turnT.firstAudio - turnT.firstSentence))}`);
+      bits.push(tools.length ? "checked " + tools.map((t) => `${t.name}${t.ok ? "" : " (failed)"} ${t.ms}ms`).join(" · ") : "no lookups");
+      $("checked").textContent = bits.join(" · ");
+      await speaker.finish();
+    } finally { stopHmm(); }
+  } catch (e) { stopHmm(); stopSpeaking(); showErr(e.message); }
+  busy = false; checkAi();
+  if (queued.length) { const n = queued.shift(); return ask(n.text, n.viaVoice, n.meta); }
+  if (viaVoice && $("conv").checked && !isSpeaking() && !awaitingTap) { setMode("idle", ""); return listenOnce({ followUp: true }); }
+  setMode("idle", idleMsg());
+  if ($("wake").checked) startWake();
+}
+
+/* ---------------- listening ----------------
+   Fast mode: the browser's live transcription runs alongside our own recording, so the text is ready the moment
+   you stop talking. Private mode (or no browser support): the recording goes to Whisper on NEAR AI Cloud. */
+let stream = null, lastAck = "";
+// Background noise filter. Orbi only counts sound as YOU talking when it is clearly above the room's noise, for a moment
+// (a door slam or a passing word is not enough), and far-away voices are quieter than yours at the mic.
+const GATE = { quiet: 0.015, normal: 0.028, noisy: 0.05 };
+const SHORT_OK = /^(yes|yeah|yep|no|nope|okay|ok|sure|thanks|thank you|cancel|stop|go ahead|please|never mind|nevermind|that's all|what|why|how|really|and|continue|repeat that|say that again)$/i;
+const ACKS = ["Mm-hmm.", "Okay.", "Got it.", "Right.", "I see."];
+async function listenOnce(opts = {}) {
+  if (recording) return;                                    // allowed while Orbi is busy: a second question gets queued
+  try {
+    stream = stream || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+  } catch { showErr("Microphone not available. You can type instead."); setMode("idle", idleMsg()); return; }
+  recording = true; stopWake(); if (isSpeaking()) stopSpeaking();   // talking over Orbi cuts it off
+  setMode("listening", opts.followUp ? "Go ahead…" : "Listening…");
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  let spoke = false, voicedMs = 0, lastVoice = performance.now(), acks = 0, lastAckAt = 0, ackUntil = 0, ackPlayed = false;
+  let floor = 0.004, loudMs = 0, peak = 0; const confs = [];          // spoke = a real, sustained voice above the room noise
+  const start = performance.now(), noSpeechLimit = opts.followUp ? 6000 : 8000;
+  let finish; const done = new Promise((resolve) => { finish = resolve; });
+
+  // live transcription by the browser (fast mode)
+  // The browser keeps transcribing through pauses (continuous) and shows what it hears live; WE decide when you are done,
+  // using the "wait" setting, so a breath or a thinking pause in the middle of a sentence does not cut you off.
+  let heard = "", heardBase = "", rec = null, over = false;
+  if ($("fast").checked && SR) {
+    try {
+      rec = new SR(); rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+      rec.onresult = (e) => {
+        let t = ""; for (let i = 0; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) confs[i] = e.results[i][0].confidence; }
+        heard = (heardBase + " " + t).trim();
+        if (!spoke) return;                                                        // words with no real voice at the mic are background talk: ignore
+        if (heard) { lastVoice = performance.now(); showUser(heard); }          // new words: you are still talking
+      };
+      rec.onend = () => { if (over) return; heardBase = heard; try { rec.start(); } catch {} };   // the browser stops after a while: keep going
+      rec.onerror = () => {};
+      rec.start();
+    } catch { rec = null; }
+  }
+
+  proc.onaudioprocess = (e) => {
+    const d = e.inputBuffer.getChannelData(0), now = performance.now();
+    if (now < ackUntil) { micLevel *= 0.8; return; }          // ignore our own acknowledgement
+    chunks.push(new Float32Array(d));
+    let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+    const rms = Math.sqrt(sum / d.length);
+    micLevel += (Math.min(1, rms * 9) - micLevel) * 0.5;
+    const chunkMs = d.length / ctx.sampleRate * 1000;
+    const thr = Math.max(GATE[$("noise").value] || GATE.normal, floor * 4) * (opts.followUp ? 1.5 : 1);   // automatic follow-up listening is stricter
+    if (rms > thr) {
+      loudMs += chunkMs; peak = Math.max(peak, rms);
+      if (loudMs >= 220) spoke = true;                                                    // sustained, not a click or one passing word
+      if (spoke) { lastVoice = now; voicedMs += chunkMs; }
+    } else { loudMs = Math.max(0, loudMs - chunkMs * 0.5); floor += (rms - floor) * 0.04; }   // learn the room's noise level from the quiet parts
+    const quiet = now - lastVoice;
+    // small acknowledgement: only mid-thought, after a longer stretch of speech, never twice in a row
+    if ($("bc").checked && spoke && voicedMs > 2800 && quiet > 650 && quiet < 1000 && acks < 2 && now - lastAckAt > 6000 && !$("mute").checked) {
+      acks++; lastAckAt = now; ackPlayed = true;
+      let a; do { a = ACKS[Math.floor(Math.random() * ACKS.length)]; } while (a === lastAck); lastAck = a;
+      ackUntil = now + 900; ack = 1;
+      say(a, { quiet: true, volume: 0.55, rate: 1.0 });
+    }
+    // adaptive end of speech: short commands end sooner than long, thoughtful sentences
+    const wait = Number($("wait").value) || 1800, endSilence = voicedMs < 2500 ? wait : wait * 1.3;
+    if ((spoke && quiet > endSilence) || now - start > 20000 || (!spoke && now - start > noSpeechLimit) || !recording) finish();
+  };
+  src.connect(proc); proc.connect(ctx.destination);
+  await done; over = true;
+  const endedAt = performance.now();
+  recording = false; micLevel = 0;
+  proc.disconnect(); src.disconnect();
+  const rate = ctx.sampleRate; ctx.close();
+  if (rec) { try { rec.abort(); } catch {} }
+  if (!spoke) { setMode("idle", opts.followUp ? "" : "I didn't hear anything."); setTimeout(() => { if (mode === "idle") setMode("idle", idleMsg()); }, 1800); if ($("wake").checked) startWake(); return; }
+
+  // the browser recogniser would also hear Orbi's own acknowledgement, so when one played use Whisper's clean recording
+  let text = "", via = "browser";
+  if (rec && heard && !ackPlayed) text = heard;
+  else {
+    via = "Whisper";
+    setMode("thinking", "Transcribing…");
+    try {
+      const r = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: toWav(chunks, rate, 16000) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Transcription failed");
+      text = j.text || "";
+    } catch (e) { showErr(e.message); setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
+  }
+  if (!text) { setMode("idle", "I couldn't make that out."); if ($("wake").checked) startWake(); return; }
+  if (opts.followUp) {      // nobody said "Hey Orbi" or tapped: be picky, so a TV or a nearby conversation is not taken as a question
+    const words = text.trim().split(/\s+/).length, known = confs.filter((c) => typeof c === "number" && c > 0), conf = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+    if ((words < 2 && !SHORT_OK.test(text.trim().replace(/[.!?,]+$/, ""))) || (via === "browser" && conf < 0.6)) { setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
+  }
+  ask(text.replace(/^\s*(hey|hi|okay|ok)[ ,]+orbi[ ,.!?]*/i, "") || text, true, { heardMs: performance.now() - endedAt, via });
+}
+function toWav(chunks, inRate, outRate) {
+  let len = 0; for (const c of chunks) len += c.length;
+  const all = new Float32Array(len); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  const ratio = inRate / outRate, n = Math.floor(len / ratio), pcm = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(len, Math.floor((i + 1) * ratio)); let s = 0;
+    for (let j = a; j < b; j++) s += all[j];
+    const v = Math.max(-1, Math.min(1, s / Math.max(1, b - a))); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+  const w = (p, s) => { for (let i = 0; i < s.length; i++) v.setUint8(p + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, outRate, true); v.setUint32(28, outRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, pcm.length * 2, true); new Int16Array(buf, 44).set(pcm);
+  return buf;
+}
+
+/* orb tap: start listening, stop listening, or interrupt Orbi */
+$("orbBtn").onclick = () => {
+  if (recording) { recording = false; return; }
+  ensureAudio();   // browsers only allow audio after a tap
+  if (isSpeaking()) stopSpeaking();     // interrupt, then listen: the new question is answered after the current answer is done
+  listenOnce();
+};
+
+/* ---------------- wake word ("Hey Orbi") ---------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let wakeRec = null, wakeTimer = null;
+// Speech recognition often writes "Orbi" as another word, and "HeyOrbi" as one word, so accept the usual mishearings.
+const WAKE_RE = /\b(?:(?:hey|hi|hay|okay|ok|a|hello)\s*)?(?:orbi|orby|orbie|orbit|orbee|orbe|orby|orbs|or be|or b|oh be|obi|orpie|arbi|arby)\b[\s,.!?]*/i;
+const GREETINGS = ["Hi there!", "Hey! How's it going?", "Hi! What's up?", "Yep, I'm here.", "Hey you. What can I do?"];
+let lastGreet = "";
+function startWake() {
+  if (awaitingTap) return;
+  if (engineState === "loading" || engineState === "on") return;   // the on-device engine is in charge
+  if (!SR || wakeRec || busy || recording || speaking) return;
+  const r = new SR(); wakeRec = r; r.continuous = true; r.interimResults = true; r.lang = "en-US";
+  r.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript, m = t.match(WAKE_RE);
+      if (!m) continue;
+      const rest = t.slice(m.index + m[0].length).trim(), final = e.results[i].isFinal;
+      clearTimeout(wakeTimer);
+      // wait a moment: "Hey Orbi, what's the price of NEAR" arrives in pieces
+      wakeTimer = setTimeout(() => wakeHit(rest), final ? 0 : 900);
+      return;
+    }
+  };
+  r.onend = () => { if (wakeRec === r) wakeRec = null; if ($("wake").checked && !busy && !recording && !speaking) setTimeout(startWake, 250); };
+  r.onerror = () => {};
+  try { r.start(); setMode("idle", idleMsg()); } catch { wakeRec = null; }
+}
+function stopWake() { clearTimeout(wakeTimer); if (wakeRec) { const r = wakeRec; wakeRec = null; r.onend = null; try { r.abort(); } catch {} } }
+async function wakeHit(rest) {
+  if (busy || recording) return;
+  stopWake();
+  if (rest.split(/\s+/).filter(Boolean).length >= 2) { ask(rest, true); return; }   // asked in the same breath
+  ensureAudio();
+  let g; do { g = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]; } while (g === lastGreet); lastGreet = g;
+  showUser(""); showOrbi(g); setMode("speaking", g);
+  await say(g, {});
+  if (!busy && !recording) listenOnce({ followUp: true });
+}
+// Chrome sometimes ends or silently drops the listener: check every 2 seconds and bring it back.
+setInterval(() => { if ($("wake").checked && !wakeRec && !busy && !recording && !speaking) startWake(); }, 2000);
+/* On-device wake word (openWakeWord). A custom "Hey Orbi" model is used if public/wake/models/hey_orbi.onnx exists;
+   until then the stock "Hey Jarvis" model stands in. Falls back to the browser recogniser if it cannot start. */
+let engine = null, engineState = "off";   // off | loading | on | failed
+async function engineStart() {
+  engineState = "loading"; setMode("idle", "Loading the wake word…");
+  try {
+    const custom = await fetch("/wake/models/hey_orbi.onnx", { method: "HEAD" }).then((r) => r.ok).catch(() => false);
+    const kw = custom ? "hey_orbi" : "hey_jarvis";
+    if (!engine) {
+      const { WakeWordEngine } = await import("/wake/WakeWordEngine.js");
+      engine = new WakeWordEngine({
+        keywords: [kw], baseAssetUrl: "/wake/models", ortWasmPath: "/wake/",
+        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.5, cooldownMs: 2500,
+      });
+      engine.on("detect", () => {
+        if (!$("wake").checked || recording || awaitingTap) return;
+        if (isSpeaking()) { stopSpeaking(); listenOnce({ followUp: true }); return; }   // saying the wake word also interrupts Orbi
+        if (!busy) wakeHit("");
+      });
+      engine.on("error", () => {});
+      await engine.load();
+    }
+    await engine.start();
+    WAKE_PHRASE = custom ? "Hey Orbi" : "Hey Jarvis"; $("wakePhrase").textContent = WAKE_PHRASE + (custom ? "" : " (stand-in until the Hey Orbi model is trained)");
+    engineState = "on"; setMode("idle", idleMsg());
+  } catch (e) {
+    engineState = "failed"; engine = null;
+    showErr("The on-device wake word could not start, so I'm using the browser's listener instead.");
+    startWake();
+  }
+}
+async function engineStop() { engineState = "off"; if (engine) { try { await engine.stop(); } catch {} } }
+$("wake").onchange = () => {
+  if ($("wake").checked) {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => { s.getTracks().forEach((t) => t.stop()); engineStart(); })
+      .catch(() => { $("wake").checked = false; showErr("Microphone permission was denied."); });
+    return;
+  }
+  engineStop(); stopWake(); setMode("idle", idleMsg());
+};
+
+/* ---------------- interrupt by voice (opt-in) ----------------
+   While Orbi speaks, watch the microphone. Sustained speech clearly louder than the echo of Orbi's own voice
+   stops Orbi and starts listening. The echo level is tracked so Orbi does not interrupt itself. */
+let viCtx = null, viAn = null, viBuf = null, viLeak = 0.01, viHits = 0, viTimer = null;
+async function viStart() {
+  try {
+    stream = stream || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+  } catch { $("vi").checked = false; showErr("Microphone permission was denied."); return; }
+  viCtx = viCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const src = viCtx.createMediaStreamSource(stream);
+  viAn = viCtx.createAnalyser(); viAn.fftSize = 1024; viBuf = new Float32Array(viAn.fftSize); src.connect(viAn);
+  clearInterval(viTimer);
+  viTimer = setInterval(() => {
+    if (!$("vi").checked || recording || !isSpeaking()) { viHits = 0; return; }
+    viAn.getFloatTimeDomainData(viBuf);
+    let sum = 0; for (let i = 0; i < viBuf.length; i++) sum += viBuf[i] * viBuf[i];
+    const rms = Math.sqrt(sum / viBuf.length), limit = Math.max(0.035, viLeak * 3);
+    if (rms > limit) viHits++; else { viHits = 0; viLeak += (rms - viLeak) * 0.05; }   // learn the echo level only from non-interruptions
+    if (viHits >= 5) { viHits = 0; stopSpeaking(); listenOnce({ followUp: true }); }   // about 0.4 s of real speech
+  }, 80);
+}
+$("vi").onchange = () => { if ($("vi").checked) viStart(); else { clearInterval(viTimer); viTimer = null; } };
+
+/* ---------------- controls ---------------- */
+$("typeBtn").onclick = () => { const o = $("typeRow").classList.toggle("open"); $("typeBtn").setAttribute("aria-pressed", o); if (o) $("text").focus(); };
+const toggleSettings = (force) => { const o = $("settings").classList.toggle("open", force); $("setBtn").setAttribute("aria-pressed", o); };
+$("setBtn").onclick = () => toggleSettings();
+$("setClose").onclick = () => toggleSettings(false);
+addEventListener("keydown", (e) => { if (e.key === "Escape") toggleSettings(false); });
+$("typeRow").onsubmit = (e) => { e.preventDefault(); const v = $("text").value.trim(); $("text").value = ""; if (v) ask(v, false); };
+$("cap").onchange = () => document.body.classList.toggle("captionsOff", !$("cap").checked);
+$("mute").onchange = () => { if ($("mute").checked) stopSpeaking(); };
+
+
+/* ---------------- approval card: nothing moves unless the owner taps Approve ---------------- */
+let card = null, cardTimer = null;
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function clearCardTimer() { if (cardTimer) { clearInterval(cardTimer); cardTimer = null; } }
+function hideCard() { clearCardTimer(); card = null; awaitingTap = false; if (mode === "idle" && !busy) setMode("idle", idleMsg()); if ($("wake").checked) startWake(); $("card").hidden = true; $("card").textContent = ""; document.body.classList.remove("hasCard"); resize(); }
+function showCard(c) {
+  if (c.kind === "deposit") return showDeposit(c);
+  clearCardTimer(); card = c;
+  awaitingTap = true; stopHmm(); stopSpeaking(); stopWake();   // the card is what matters now: stop talking and stop listening
+  setMode("idle", idleMsg());
+  const box = $("card"); box.hidden = false; box.className = c.mode === "live" ? "live" : ""; box.textContent = "";
+  document.body.classList.add("hasCard"); resize(); box.scrollIntoView({ block: "nearest" });
+  box.append(el("div", "tag", c.mode === "live" ? "Live · real funds on " + c.network : "Rehearsal · nothing will be sent"));
+  box.append(el("h2", "", c.title));
+  for (const l of c.lines) {
+    const m = /^([^:]{2,26}):\s+(.+)$/.exec(l);                      // "You give: 1 NEAR" becomes a label and a value
+    if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); box.append(row); }
+    else box.append(el("div", "line", l));
+  }
+  if (c.address) {
+    const a = el("div", "addr"); a.append(el("span", "k", "Full address: check every part"));
+    a.append(el("code", "", c.address.match(/.{1,8}/g).join(" "))); box.append(a);
+  }
+  for (const w of c.warnings) box.append(el("div", "warn", "Note: " + w));
+  const row = el("div", "row2");
+  const go = el("button", "go", "Approve"); go.type = "button"; go.onclick = approveCard;
+  const no = el("button", "", "Cancel"); no.type = "button"; no.onclick = cancelCard;
+  const timer = el("span", "timer", ""); timer.id = "cardTimer";
+  const total = Math.max(1, c.expiresAt - Date.now()), ttl = el("div", "ttl"), fill = el("i"); ttl.append(fill);
+  row.append(go, no, timer); box.append(ttl, row);
+  const tick = () => {
+    fill.style.width = Math.max(0, Math.min(100, ((c.expiresAt - Date.now()) / total) * 100)) + "%";
+    const left = Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000));
+    timer.textContent = left > 0 ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired";
+    if (!left) { go.disabled = true; clearCardTimer(); awaitingTap = false; if (mode === "idle") setMode("idle", idleMsg()); if ($("wake").checked) startWake(); }
+  };
+  tick(); cardTimer = setInterval(tick, 1000);
+}
+// A deposit card: Orbi sends nothing. The owner sends USDC on Base to the address, and the card follows it until the NEAR arrives.
+function copyBtn(text) { const b = el("button", "", "Copy"); b.type = "button"; b.onclick = async () => { try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1500); } catch { b.textContent = "Select it by hand"; } }; return b; }
+// A QR of the plain address (not a payment link), so exchange and wallet scanners all read it. It does not carry the amount or the network.
+function drawQr(box, text) {
+  const draw = () => { try { const q = qrcode(0, "M"); q.addData(text); q.make(); const img = new Image(); img.src = q.createDataURL(5, 4); img.alt = "QR code of the deposit address"; box.textContent = ""; box.append(img, el("div", "qrnote", "Scan to fill in the address. Choose Base and type the amount yourself.")); } catch {} };
+  if (window.qrcode) return draw();
+  const s = document.createElement("script"); s.src = "/vendor/qrcode.js"; s.onload = draw; document.head.append(s);
+}
+function showDeposit(c) {
+  clearCardTimer(); card = c; awaitingTap = false;
+  const box = $("card"); box.hidden = false; box.className = ""; box.textContent = "";
+  document.body.classList.add("hasCard"); resize(); box.scrollIntoView({ block: "nearest" });
+  box.append(el("div", "tag", "Deposit · you send the USDC, Orbi sends nothing"));
+  box.append(el("h2", "", c.title));
+  for (const l of c.lines) { const m = /^([^:]{2,26}):\s+(.+)$/.exec(l); if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); box.append(row); } else box.append(el("div", "line", l)); }
+  for (const w of c.warnings) box.append(el("div", "warn", "Note: " + w));
+  const a = el("div", "addr"); a.append(el("span", "k", "Deposit address on Base: check every part"));
+  a.append(el("code", "", c.address.match(/.{1,8}/g).join(" ")));
+  const qrBox = el("div", "qr"); a.append(qrBox); drawQr(qrBox, c.address);
+  const ar = el("div", "cp"); ar.append(copyBtn(c.address)); a.append(ar); box.append(a);
+  const status = el("div", "line", "Waiting for your deposit…"); status.id = "depStatus"; box.append(status);
+  const total = Math.max(1, c.expiresAt - Date.now()), ttl = el("div", "ttl"), fill = el("i"); ttl.append(fill);
+  const close = el("button", "", "Close"); close.type = "button"; close.onclick = hideCard;
+  const timer = el("span", "timer", ""); const row = el("div", "row2"); row.append(close, timer); box.append(ttl, row);
+  let n = 0, finished = false, busyPoll = false;
+  const poll = async () => {
+    if (busyPoll || finished) return; busyPoll = true;
+    try {
+      const j = await (await fetch("/api/deposit-status?session=" + encodeURIComponent(session) + "&id=" + encodeURIComponent(c.id))).json();
+      if (j.line) status.textContent = j.line;
+      if (j.state === "done" || j.state === "refunded" || j.state === "failed" || j.state === "expired") {
+        finished = true; status.className = "line " + (j.state === "done" ? "ok" : "bad");
+        if (j.txUrl) { const l = el("a", "", "View the transaction"); l.href = j.txUrl; l.target = "_blank"; l.rel = "noopener noreferrer"; box.insertBefore(l, ttl); }
+        if (!busy) say(j.spoken, {});
+      }
+    } catch {} busyPoll = false;
+  };
+  const tick = () => {
+    fill.style.width = Math.max(0, Math.min(100, ((c.expiresAt - Date.now()) / total) * 100)) + "%";
+    const left = Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000));
+    timer.textContent = finished ? "" : left > 0 ? `Address valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired";
+    if (!left && !finished) poll();
+    if (!finished && (n++ % 6) === 5) poll();
+    if (finished) clearCardTimer();
+  };
+  tick(); cardTimer = setInterval(tick, 1000);
+}
+function cardResult(ok, lines, txs) {
+  clearCardTimer();
+  const box = $("card"); box.textContent = "";
+  box.append(el("div", "tag", card && card.mode === "live" ? "Live" : "Rehearsal"));
+  box.append(el("div", "badge " + (ok ? "ok" : "bad"), ok ? "✓" : "!"));
+  box.append(el("h2", ok ? "ok" : "bad", ok ? "Done" : "Not done"));
+  for (const l of lines) box.append(el("div", ok ? "ok" : "bad", l));
+  for (const t of txs || []) {
+    const row = el("div", "line", t.label + ": ");
+    if (t.url) { const a = el("a", "", t.hash.slice(0, 10) + "…"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer"; row.append(a); } else row.append(document.createTextNode(t.hash));
+    box.append(row);
+  }
+  const close = el("button", "", "Close"); close.type = "button"; close.onclick = hideCard;
+  const row = el("div", "row2"); row.append(close); box.append(row);
+}
+async function approveCard() {
+  if (!card) return;
+  const c = card, buttons = $("card").querySelectorAll("button"); buttons.forEach((b) => (b.disabled = true));
+  awaitingTap = false; clearCardTimer(); $("cardTimer") && ($("cardTimer").textContent = "Working…"); setMode("thinking", "Working on it…");
+  try {
+    const r = await fetch("/api/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, id: c.id, hash: c.hash }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Request failed");
+    cardResult(j.ok, j.lines, j.txs); setMode("idle", idleMsg()); await say(j.spoken, {});
+  } catch (e) { cardResult(false, [e.message], []); setMode("idle", idleMsg()); await say(e.message, {}); }
+}
+async function cancelCard() {
+  if (!card) return; const c = card; awaitingTap = false; hideCard();
+  try { await fetch("/api/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, id: c.id }) }); } catch {}
+  await say("Okay, cancelled. Nothing was sent.", {});
+}
+// a card that is still open survives a page reload
+fetch("/api/card?session=" + encodeURIComponent(session)).then((r) => r.json()).then((j) => { if (j.card) showCard(j.card); }).catch(() => {});
+
+/* ---------------- AI service status: tell the owner before they ask, so a failure is not a surprise ---------------- */
+async function checkAi() {
+  try {
+    const st = await (await fetch("/api/status")).json();
+    const note = st.ai && st.ai.notice ? st.ai.notice : "";
+    $("aiNote").textContent = note; $("aiNote").hidden = !note;
+    $("aiPill").classList.toggle("bad", Boolean(note)); $("aiPillText").textContent = note ? "AI trouble" : "AI online";
+  } catch {}
+}
+checkAi(); setInterval(checkAi, 30000);
+
+/* ---------------- contacts ---------------- */
+async function loadContacts() {
+  try {
+    const j = await (await fetch("/api/contacts")).json(); const box = $("contactList"); box.textContent = "";
+    if (!j.contacts.length) box.append(el("div", "c", "No contacts yet."));
+    for (const c of j.contacts) {
+      const row = el("div", "c"); row.append(el("strong", "", c.name));
+      const a = el("span", "a", c.address); a.title = c.address; row.append(a);
+      const del = el("button", "", "Delete"); del.type = "button";
+      del.onclick = async () => { await fetch("/api/contacts?name=" + encodeURIComponent(c.name), { method: "DELETE" }); loadContacts(); };
+      row.append(del); box.append(row);
+    }
+  } catch {}
+}
+$("contactForm").onsubmit = async (e) => {
+  e.preventDefault(); const f = e.target; $("contactMsg").textContent = "";
+  const r = await fetch("/api/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: f.name.value, address: f.address.value }) });
+  const j = await r.json();
+  if (!r.ok) { $("contactMsg").textContent = j.error; return; }
+  f.reset(); loadContacts(); $("contactMsg").textContent = j.notice || "Saved.";
+};
+loadContacts();
+
+/* ---------------- bridge settings ---------------- */
+fetch("/api/bridge-settings").then((r) => r.json()).then((j) => { if (j.refund) $("bridgeMsg").textContent = "Refund address saved: " + j.refund.slice(0, 8) + "…" + j.refund.slice(-6); }).catch(() => {});
+$("bridgeForm").onsubmit = async (e) => {
+  e.preventDefault(); const f = e.target; $("bridgeMsg").textContent = "";
+  const r = await fetch("/api/bridge-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refund: f.refund.value }) });
+  const j = await r.json();
+  if (!r.ok) { $("bridgeMsg").textContent = j.error; return; }
+  f.reset(); $("bridgeMsg").textContent = "Saved. Refunds go to " + j.refund.slice(0, 8) + "…" + j.refund.slice(-6);
+};
+
+
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  if (s.hosted) {
+    const b = $("demoBanner"); b.hidden = false;
+    b.textContent = s.execution === "live"
+      ? "Shared demo with a small LIVE test wallet: real funds, tiny amounts (up to $" + s.limits.per_action_usd + " per action). You can swap, and send only to Treasury" + (s.live_actions_per_visitor ? " (" + s.live_actions_per_visitor + " real actions per person per day)" : "") + ". Please do not send your own funds anywhere."
+      : "Shared demo in rehearsal mode: nothing is sent or signed.";
+    $("contactForm").hidden = true;
+  }
+  $("mode").title = s.mode; $("mode").textContent = s.execution === "live" ? "LIVE · " + s.network : s.execution === "rehearsal" ? "rehearsal" : "read-only"; $("mode").classList.toggle("live", s.execution === "live");
+  if (s.voice === "elevenlabs") {
+    voiceMode = "elevenlabs";
+    // short phrases ready to play instantly: one at a time and low priority, so they never compete with a real answer
+    (async () => { for (const a of [...ACKS, ...HMMS]) { try { clipCache.set(a, await fetchClip(a, undefined, undefined, true)); } catch {} } })();
+  }
+}).catch(() => {});
+if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
+// the rate and price data takes several seconds to load after the server starts: say so instead of waiting silently
+(function waitReady() {
+  fetch("/api/status").then((r) => r.json()).then((st) => {
+    if (st.ready) { if (mode === "idle" && !busy) setMode("idle", idleMsg()); return; }
+    if (mode === "idle" && !busy) $("state").textContent = "Warming up the rate data… (a few seconds)";
+    setTimeout(waitReady, 1000);
+  }).catch(() => {});
+})();
+setMode("idle", idleMsg());
+</script>
+</body>
+</html>

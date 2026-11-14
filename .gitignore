@@ -1,0 +1,18 @@
+.env
+.env.*
+.secrets/
+!.env.example
+node_modules/
+dist/
+.DS_Store
+*.log
+.cache/
+.data/
+
+# Stock wake-word model (non-commercial licence) and an unused older candidate: kept locally, not published
+apps/web/public/wake/models/hey_jarvis_v0.1.onnx
+apps/web/public/wake/models/hey_orbi.candidate.onnx
+
+# Internal working notes and the organizers' brief: kept locally, not published
+PLAN.md
+HACKATHON.md
