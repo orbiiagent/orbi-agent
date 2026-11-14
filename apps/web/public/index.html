@@ -669,8 +669,9 @@ async function listenOnce(opts = {}) {
   const proc = ctx.createScriptProcessor(4096, 1, 1);
   const chunks = [];
   let spoke = false, voicedMs = 0, lastVoice = performance.now(), acks = 0, lastAckAt = 0, ackUntil = 0, ackPlayed = false;
-  let floor = $("noise").value === "quiet" ? 0.004 : Math.max(0.004, roomRms), loudMs = 0, peak = 0; const confs = [];          // spoke = a real, sustained voice above the room noise
-  const start = performance.now(), noSpeechLimit = opts.followUp ? 6000 : 8000;
+  let floor = $("noise").value === "quiet" ? 0.004 : Math.min(0.02, Math.max(0.004, roomRms)), loudMs = 0, peak = 0; const confs = [];          // spoke = a real, sustained voice above the room noise
+  const strict = opts.followUp && !opts.explicit;   // strict only for listening nobody asked for; after "Hey Orbi" the owner is clearly talking to Orbi
+  const start = performance.now(), noSpeechLimit = strict ? 6000 : 8000;
   let finish; const done = new Promise((resolve) => { finish = resolve; });
 
   // live transcription by the browser (fast mode)
@@ -700,10 +701,10 @@ async function listenOnce(opts = {}) {
     const rms = Math.sqrt(sum / d.length);
     micLevel += (Math.min(1, rms * 9) - micLevel) * 0.5;
     const chunkMs = d.length / ctx.sampleRate * 1000;
-    const auto = $("noise").value === "auto", thr = Math.max(GATE[$("noise").value] || GATE.normal, floor * (auto ? 5 : 4)) * (opts.followUp ? 1.5 : 1);   // automatic follow-up listening is stricter
+    const auto = $("noise").value === "auto", thr = Math.max(GATE[$("noise").value] || GATE.normal, floor * (auto ? 4 : 4)) * (strict ? 1.5 : 1);   // automatic follow-up listening is stricter
     if (rms > thr) {
       loudMs += chunkMs; peak = Math.max(peak, rms); if (!spoke) floor += (rms - floor) * 0.02;   // steady chatter slowly becomes part of the room; your voice is a burst well above it
-      if (loudMs >= (auto ? 320 : 220) && peak > floor * (auto ? 5.5 : 3)) spoke = true;                                                    // sustained, not a click or one passing word
+      if (loudMs >= (auto ? 280 : 220) && peak > floor * (auto ? 4.5 : 3)) spoke = true;                                                    // sustained, not a click or one passing word
       if (spoke) { lastVoice = now; voicedMs += chunkMs; }
     } else { loudMs = Math.max(0, loudMs - chunkMs * 0.5); floor += (rms - floor) * 0.04; }   // learn the room's noise level from the quiet parts
     const quiet = now - lastVoice;
@@ -741,7 +742,7 @@ async function listenOnce(opts = {}) {
     } catch (e) { showErr(e.message); setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
   }
   if (!text) { setMode("idle", "I couldn't make that out."); if ($("wake").checked) startWake(); return; }
-  if (opts.followUp) {      // nobody said "Hey Orbi" or tapped: be picky, so a TV or a nearby conversation is not taken as a question
+  if (strict) {      // nobody said "Hey Orbi" or tapped: be picky, so a TV or a nearby conversation is not taken as a question
     const words = text.trim().split(/\s+/).length, known = confs.filter((c) => typeof c === "number" && c > 0), conf = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
     if ((words < 2 && !SHORT_OK.test(text.trim().replace(/[.!?,]+$/, ""))) || (via === "browser" && conf < (roomRms > 0.015 ? 0.78 : 0.6))) { setMode("idle", idleMsg()); if ($("wake").checked) startWake(); return; }
   }
@@ -809,7 +810,7 @@ async function wakeHit(rest) {
   let g; do { g = GREETS[Math.floor(Math.random() * GREETS.length)]; } while (g === lastGreet); lastGreet = g;
   showUser(""); showOrbi(g); setMode("speaking", g);
   await say(g, {});                                    // one or two words, already loaded: then straight to listening
-  if (!busy && !recording) listenOnce({ followUp: true });
+  if (!busy && !recording) listenOnce({ followUp: true, explicit: true });
 }
 // Chrome sometimes ends or silently drops the listener: check every 2 seconds and bring it back.
 setInterval(() => { if ($("wake").checked && !wakeRec && !busy && !recording && !speaking) startWake(); }, 2000);
@@ -829,7 +830,7 @@ async function engineStart() {
       });
       engine.on("detect", () => {
         if (!$("wake").checked || recording) return;
-        if (isSpeaking()) { stopSpeaking(); listenOnce({ followUp: true }); return; }   // saying the wake word also interrupts Orbi, even while it reads a card out
+        if (isSpeaking()) { stopSpeaking(); listenOnce({ followUp: true, explicit: true }); return; }   // saying the wake word also interrupts Orbi, even while it reads a card out
         if (awaitingTap) return;
         if (!busy) wakeHit("");
       });
@@ -872,7 +873,7 @@ async function viStart() {
       viHits = 0;
       if (viAn && !recording && !isSpeaking() && viCtx.state === "running") {   // idle: keep learning how loud the room is
         viAn.getFloatTimeDomainData(viBuf); let q = 0; for (let i = 0; i < viBuf.length; i++) q += viBuf[i] * viBuf[i];
-        const r = Math.sqrt(q / viBuf.length); roomRms += (r - roomRms) * (r < roomRms ? 0.15 : 0.03);   // a crowd is noticed within a few seconds
+        const r = Math.sqrt(q / viBuf.length); roomRms += (r - roomRms) * (r < roomRms ? 0.15 : r > roomRms * 2.5 ? 0.002 : 0.03);   // a crowd builds up gradually and is absorbed within seconds; a sudden loud burst (your own "Hey Orbi") barely moves it
         if (++roomTick % 12 === 0) tuneWake();
       }
       return;
@@ -882,7 +883,7 @@ async function viStart() {
     let sum = 0; for (let i = 0; i < viBuf.length; i++) sum += viBuf[i] * viBuf[i];
     const rms = Math.sqrt(sum / viBuf.length), limit = Math.max(0.035, viLeak * 3, $("noise").value === "quiet" ? 0 : roomRms * 3.5);
     if (rms > limit) viHits++; else { viHits = 0; viLeak += (rms - viLeak) * 0.05; }   // learn the echo level only from non-interruptions
-    if (viHits >= 5) { viHits = 0; stopSpeaking(); listenOnce({ followUp: true }); }   // about 0.4 s of real speech
+    if (viHits >= 5) { viHits = 0; stopSpeaking(); listenOnce({ followUp: true, explicit: true }); }   // about 0.4 s of real speech
   }, 80);
 }
 // "Hey Orbi" and interrupt-by-voice start on by default. The browser asks for the microphone once; if it is blocked, both switch off.
