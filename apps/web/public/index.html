@@ -927,6 +927,7 @@ function planOf(c) {
     const [, amt, from, out, to] = m, stages = [{ label: "Getting a fresh route from Rhea" }, { label: "Checking the price has not moved" }, { label: "Registering Orbi's accounts (one time)", optional: true, skip: "Not needed" }];
     if (from === "NEAR") stages.push({ label: "Wrapping NEAR" });
     stages.push({ label: `Swapping ${amt} ${from} on Rhea`, recv: true, sub: "Waiting for the network to confirm" }, { label: "Checking what arrived" });
+    if (to === "NEAR") stages.push({ label: "Unwrapping to NEAR" });
     return { kind: "swap", amt, sym: from, out, to, dest: "Rhea router", stages, doing: `Swapping ${amt} ${from} for ${to}` };
   }
   return null;

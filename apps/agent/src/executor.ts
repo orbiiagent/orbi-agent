@@ -116,7 +116,9 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
     const have = BigInt(await chain.view<string>(from.contract, "ft_balance_of", { account_id: me }));
     if (have < amountIn) fail(`Not enough ${from.symbol}: I have ${fromUnits(have, from.decimals)}.`);
   }
-  const before = to.contract === null ? native : BigInt(await chain.view<string>(to.contract, "ft_balance_of", { account_id: me }));
+  // The router pays out the TOKEN, so a swap "into NEAR" arrives as wNEAR (wrap.near). It is measured as wNEAR and then unwrapped to plain NEAR below.
+  const outToken = to.contract === null ? "wrap.near" : to.contract;
+  const before = BigInt(await chain.view<string>(outToken, "ft_balance_of", { account_id: me }));
 
   // 3. Register what is missing.
   if (storageTodo.length || routerTodo.length) onStep("Registering Orbi's accounts (one time)");
@@ -144,9 +146,14 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
 
   // 6. Report what really arrived, not what was promised.
   onStep("Checking what arrived");
-  const afterBal = to.contract === null ? await chain.nativeBalance() : BigInt(await chain.view<string>(to.contract, "ft_balance_of", { account_id: me }));
+  const afterBal = BigInt(await chain.view<string>(outToken, "ft_balance_of", { account_id: me }));
   const got = afterBal - before;
-  const gotText = got > 0n ? `${fromUnits(got, to.decimals, 4)} ${to.symbol}${to.contract === null ? " (after fees)" : ""}` : "nothing yet";
+  if (to.contract === null && got > 0n) {   // turn the wNEAR that arrived back into plain NEAR
+    onStep("Unwrapping to NEAR");
+    const u = must("Unwrapping to NEAR", await chain.call("wrap.near", "near_withdraw", { amount: got.toString() }, { depositYocto: 1n, gas: 30n * TGAS }));
+    txs.push(tx("Unwrap to NEAR", u));
+  }
+  const gotText = got > 0n ? `${fromUnits(got, to.decimals, 4)} ${to.symbol}` : "nothing yet";
   const ok = got > 0n;
   return {
     ok,

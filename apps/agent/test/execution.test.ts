@@ -107,21 +107,25 @@ test("swap USDC -> NEAR with nothing registered: registers, then ft_transfer_cal
     views: (c, mth) => {
       if (c === AGGREGATOR && mth === "query_user_tokens_registered") return [false, false, false];
       if (mth === "storage_balance_of") return null; // nobody registered anywhere
-      if (mth === "ft_balance_of") return "5000000";
+      if (mth === "ft_balance_of") return c === "wrap.near" ? (swapped ? "490000000000000000000000" : "0") : "5000000";   // the router pays the output as wNEAR
       return null;
     },
   });
-  // native balance grows after the swap (the output is native NEAR)
-  const chain = { ...m.chain, nativeBalance: async () => (swapped ? 5n * NEAR + 490_000_000_000_000_000_000_000n : 5n * NEAR) };
-  const r = await executeSwapRhea(swap(), chain, { fetchRoute: async () => route("495000000000000000000000") });
+  const r = await executeSwapRhea(swap(), m.chain, { fetchRoute: async () => route("495000000000000000000000") });
   assert.equal(r.ok, true);
   const methods = m.calls.map((c) => c.method);
+  assert.equal(methods.at(-1), "near_withdraw", "the wNEAR that arrived is unwrapped to plain NEAR");
+  const un = m.calls.at(-1)!;
+  assert.equal(un.contract, "wrap.near");
+  assert.deepEqual(un.args, { amount: "490000000000000000000000" });
+  assert.equal(un.deposit, 1n);
+  methods.pop();
   assert.equal(methods.at(-1), "ft_transfer_call");
   assert.ok(methods.includes("tokens_storage_deposit"));
   const agg = m.calls.find((c) => c.method === "tokens_storage_deposit")!;
   assert.deepEqual(agg.args, { user: ME, tokens: ["wrap.near", USDC, USDT] });
   assert.equal(agg.deposit, 15_000_000_000_000_000_000_000n); // 3 tokens x 0.005 NEAR
-  const last = m.calls.at(-1)!;
+  const last = m.calls.filter((c) => c.method === "ft_transfer_call").at(-1)!;
   assert.equal(last.contract, USDC);
   assert.equal(last.deposit, 1n);
   assert.equal(last.gas, 300_000_000_000_000n);
@@ -208,11 +212,10 @@ test("swap with already-registered accounts sends only the swap", async () => {
   let swapped = false;
   const m = mockChain({
     afterSwap: () => (swapped = true),
-    views: (c, mth) => (c === AGGREGATOR && mth === "query_user_tokens_registered" ? [true, true, true] : mth === "storage_balance_of" ? REG : mth === "ft_balance_of" ? "5000000" : null),
+    views: (c, mth) => (c === AGGREGATOR && mth === "query_user_tokens_registered" ? [true, true, true] : mth === "storage_balance_of" ? REG : mth === "ft_balance_of" ? (c === "wrap.near" ? (swapped ? "490000000000000000000000" : "0") : "5000000") : null),
   });
-  const chain = { ...m.chain, nativeBalance: async () => (swapped ? 10n * NEAR + NEAR / 2n : 10n * NEAR) };
-  const r = await executeSwapRhea(swap(), chain, { fetchRoute: async () => route("495000000000000000000000") });
-  assert.deepEqual(m.calls.map((c) => c.method), ["ft_transfer_call"]);
+  const r = await executeSwapRhea(swap(), m.chain, { fetchRoute: async () => route("495000000000000000000000") });
+  assert.deepEqual(m.calls.map((c) => c.method), ["ft_transfer_call", "near_withdraw"]);
   assert.equal(r.ok, true);
 });
 
