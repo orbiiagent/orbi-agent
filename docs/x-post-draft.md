@@ -22,9 +22,10 @@ The AI only proposes. Limits and approval are enforced in code.
 
 ## Reply 2 (links and ask)
 
-Real mainnet swap in the video: 0.5 NEAR to 1.78 USDC.
+The numbers in the video come from my real mainnet transactions (swap, send, Base deposit), listed in the README.
+Try it live: https://orbi-agent-production.up.railway.app/
 This is a prototype: Orbi uses a small demo wallet today. Next: your own wallet, always-on "Hey Orbi", and market updates.
-Repo: [REPO LINK]
+Repo: https://github.com/orbiiagent/orbi-agent
 What would you want Orbi to do for you first?
 
 ## Alternate Version B (shorter)
@@ -37,6 +38,6 @@ I built Orbi at NEAR HACKATHON: say "Hey Orbi, swap 0.3 NEAR to USDC", see an ap
 
 ## Notes
 
-- Check each number against the video before posting (swap amount, USDC received).
-- Replace [REPO LINK] once the repo is public. Post only after the repo is public.
+- The video shows a swap of 1.78 USDC to 0.54 NEAR, a send of 1.128456 NEAR and a 5 USDC Base deposit arriving as about 1.4 NEAR. Those are real figures from mainnet, shown as a re-creation in the UI; the final "Unwrapping to NEAR" stage comes from code that has not yet run live, so say "based on" and not "recorded live" if anyone asks.
+- The repo link is already filled in. Post only after the repo is public.
 - Do not include your wallet addresses or any key in the post or the video.

@@ -26,8 +26,10 @@ What a judge should take from the demo today is the interaction model and the sa
 | "Quote 5 NEAR to USDC" | Compares routes from **NEAR Intents** and **Rhea SmartRouterV2**, picks the best after fees. Quote only. |
 | "Swap 0.5 NEAR to USDC" | Shows an approval card with amount, estimated output, fee and expiry. After you tap Approve, Orbi signs and runs the swap on Rhea. |
 | "Send 1 NEAR to Treasury" | Same, for a **saved contact** (your own wallets, by name). Orbi never accepts or speaks an address by voice. |
-| "Bring in 20 USDC from Base" | Creates a deposit card with a real NEAR Intents deposit address on Base plus a QR code. You send the USDC from your own wallet or exchange; Intents bridges it and delivers NEAR to Orbi's wallet. Orbi holds no Base key. |
+| "Send all my NEAR to Hosted Orbi" | Works out the exact amount from the live balance (NEAR keeps the 0.2 NEAR fee reserve, tokens send in full) and shows it on the approval card like any other amount. |
+| "Bring in 20 USDC from Base" | Creates a deposit card with a real NEAR Intents deposit address on Base plus a QR code. You send the USDC from your own wallet or exchange. When the deposit is seen, the QR is replaced by live stages (deposit received, bridging, NEAR arrived). Orbi holds no Base key. |
 | "Did it go through?" / "What was my last transaction?" | Reads Orbi's own activity log and double-checks real transactions on-chain. |
+| (a transaction fails or does not do what was expected) | Reads the transaction's own record on-chain, read-only, and says why in plain words (out of gas, receiver not registered, price moved, "the router paid you wNEAR instead of NEAR"). It shows on the card as a "Why:" line and Orbi says it. |
 | "Remember that I prefer short answers" / "Forget that" | Keeps up to 30 short notes about you (see Memory). |
 
 ## Safety model: the model proposes, code enforces
@@ -35,6 +37,7 @@ What a judge should take from the demo today is the interaction model and the sa
 - The AI model can only **propose**. Every amount, quote and transaction is built by deterministic code, never by the model.
 - **Approval card** for every swap, send and deposit: single-use, expires after 120 s, bound to a hash of exactly what was shown. A newer proposal replaces the old one.
 - **Limits in code**: $10 per action, $25 per day, first payment to a new contact at most $5, a 0.2 NEAR reserve is always kept, a swap is cancelled if the fresh quote is more than 1% worse than the approved one. Limits are re-checked at approval time.
+- **After Approve** the card shows every stage of the transaction (swap, send or bridge) ticking live, then keeps them with the transaction links. This is display only: nothing in it can start or change a transaction.
 - **Contacts only**: payments go to saved names. Addresses are never accepted by voice and never read aloud.
 - **No loosening by chat**: memory refuses notes about addresses, keys, limits or approval rules; the system prompt treats memory as background data only.
 - Cross-site requests and foreign Host headers are refused by the local server. Secrets live only in `.env` / `.secrets` (git-ignored).
@@ -46,15 +49,16 @@ What a judge should take from the demo today is the interaction model and the sa
 | --- | --- |
 | Swap 0.5 NEAR to USDC via Rhea, tapped Approve | Done. Quoted about 1.7837 USDC, received 1.7856 USDC. Transaction `5B3mKrNoWvujfJuTyg6hJ32udJMCzj8zFrA3VDa5Xonv` ([nearblocks](https://nearblocks.io/txns/5B3mKrNoWvujfJuTyg6hJ32udJMCzj8zFrA3VDa5Xonv)). |
 | Bring in 5 USDC from Base through a NEAR Intents deposit address | Done. About 1.39 NEAR arrived in Orbi's wallet (native NEAR; the account was created by the delivery). |
-| Plain NEAR transfer to a contact | Tested on testnet (verified independently over RPC). |
+| Send 0.99 USDC and 0.01 NEAR to a saved contact (Treasury), tapped Approve | Done on mainnet. Transactions [`xRPAPFSn…`](https://nearblocks.io/txns/xRPAPFSnBVdrAdQKJXHLgbvX6tdypDnKN3mbFyaaFWm) and [`Ftid7bDT…`](https://nearblocks.io/txns/Ftid7bDT6DHhjY8TwxnjAQc9w844xtWX6RoyXPMzYPMz). |
+| Swap 1.7856 USDC to NEAR via Rhea, tapped Approve | The swap worked on-chain ([`B6zZEkzp…`](https://nearblocks.io/txns/B6zZEkzpjRQwUN6YNxbcgDSpphhHfiRBsAC8GuXHGMWF)) but the router paid the result as **wNEAR**, so Orbi reported it as failed. That found a real bug: Orbi now unwraps the wNEAR to plain NEAR as a final stage, and explains failures like this one itself. |
 
-Not verified: real-microphone behaviour in noisy rooms (the noise gate was only tested with synthetic audio).
+Not verified: the automatic unwrap step of a swap into NEAR has been unit tested and the wNEAR was unwrapped by hand on mainnet, but the new automatic path has not been run live yet; real-microphone behaviour in noisy rooms (the noise gate and the adaptive "Auto" room setting were only tested with synthetic audio and informally).
 
 A lesson from testing: a deposit must be **exactly** the amount on the card. An underpaid deposit is not bridged; per the Intents API it is refunded to the refund address after the quote deadline. Orbi's card says "send exactly".
 
 ## Try it hosted (no setup)
 
-**Live demo: [HOSTED URL, added when deployed]**
+**Live demo: https://orbi-agent-production.up.railway.app/**
 
 Open the link, tap the orb or type, and try "What's the USDC lending rate?" or "Swap 0.3 NEAR to USDC". The hosted copy is a shared demo with a **small live test wallet**: real funds, tiny amounts. Each action is capped at $0.50, the whole demo at a small daily total, and each visitor gets a few real actions a day. You can swap, and send only to one saved contact (Treasury, the project owner's own wallet). Nothing of yours is touched: do not send your own funds anywhere. Your notes and settings are private to your browser (a cookie, no account). Base deposits are switched off there; run Orbi locally to try them.
 
@@ -66,7 +70,7 @@ Requirements: Node >= 22.18 (it runs TypeScript directly), a NEAR AI Cloud API k
 npm install
 cp .env.example .env            # then fill in NEAR_AI_API_KEY
 node scripts/gen-agent-key.mjs  # creates the agent wallet keypair, put the values in .env
-npm test                        # 111 unit tests, no network or keys needed
+npm test                        # 154 unit tests, no network or keys needed
 npm run web                     # open http://127.0.0.1:3000
 ```
 
@@ -99,6 +103,8 @@ Agent         apps/agent/src
    policy.ts     caps, reserve, daily limit            (deterministic, unit tested)
    actions.ts    approval cards, single-use hashes, audit log
    executor.ts   the only code that triggers transactions
+   progress.ts   display-only record of the stages of a running action (for the card)
+   diagnose.ts   read-only: explains a failed or unexpected transaction from its on-chain record
    chain.ts      the only writer, uses near-api-js (agent key stays server-side)
    quotes.ts     NEAR Intents 1Click + Rhea SmartRouterV2 comparison
    bridge.ts     Base to NEAR deposits through Intents 1Click
@@ -114,7 +120,7 @@ NEAR pieces used: NEAR AI Cloud (chat model and Whisper, TEE-backed), NEAR Inten
 - **Hosting a shared copy**: on your own computer Orbi has one owner. With `ORBI_MULTIUSER=on`, each browser gets a private random id (a cookie) and its own memory, habits, contacts and refund address, so visitors never see each other's data. A shared copy runs in rehearsal mode (nothing is signed) unless the operator deliberately enables a small live wallet (`ORBI_ALLOW_PUBLIC_LIVE=1`). In that case it shows a banner, caps each action and the day's total (for example $0.50 and $5), caps the number of real actions per day, runs real actions one at a time, lets visitors send only to one saved contact (Treasury, the operator's own wallet), and keeps Base deposits switched off, because the demo wallet is shared. There are no accounts yet: a new browser or device starts clean.
 - **Routing fee**: Orbi charges **no fee** in this demo (`ORBI_FEE_PER_MILLE=0`). The code can add an optional app fee to Rhea swaps (`ORBI_FEE_PER_MILLE`, per mille, with a recipient in `ORBI_FEE_RECIPIENT`); when it is on, it is shown on the card. The verified swap above was run with a 0.1% fee switched on; later runs have it off.
 - **Wake word**: on-device openWakeWord with a custom "hey orbi" model trained for this project; the engine and onnxruntime-web are vendored. Stock openWakeWord models are CC BY-NC-SA, which is why a self-trained model is used.
-- **Tests**: 111 unit tests (policy, approval flow, execution order, bridge, memory, streaming, speech fixes). Microphone capture, audible playback and real-room noise handling need a human to check.
+- **Tests**: 154 unit tests (policy, approval flow, execution order, send-all, bridge, failure explanations, memory, streaming, speech fixes). Microphone capture, audible playback and real-room noise handling need a human to check.
 
 ## Roadmap (not built)
 
