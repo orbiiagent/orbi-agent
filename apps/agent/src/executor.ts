@@ -15,6 +15,7 @@ export type SwapAction = { kind: "swap"; from: string; to: string; amount: strin
 export type Action = SendAction | SwapAction;
 export type ExecResult = { ok: boolean; simulated?: boolean; txs: { label: string; hash: string; url: string }[]; spoken: string; lines: string[] };
 
+export type OnStep = (label: string) => void;   // tells the card what is happening now; never changes what happens
 export class ExecError extends Error {}
 const fail = (msg: string): never => {
   throw new ExecError(msg);
@@ -27,10 +28,11 @@ function must(label: string, r: TxResult): TxResult {
 }
 
 // ---------- send ----------
-export async function executeSend(a: SendAction, chain: Chain): Promise<ExecResult> {
+export async function executeSend(a: SendAction, chain: Chain, onStep: OnStep = () => {}): Promise<ExecResult> {
   const token = findToken(a.token);
   const txs: ExecResult["txs"] = [];
   const reserve = reserveYocto();
+  onStep("Checking the balance");
   const native = await chain.nativeBalance();
 
   if (!token.contract) {
@@ -38,6 +40,7 @@ export async function executeSend(a: SendAction, chain: Chain): Promise<ExecResu
     if (native < amount + reserve) fail(`Not enough NEAR: I have ${yocto(native)} and keep ${yocto(reserve)} aside for fees.`);
     const isImplicit = /^[0-9a-f]{64}$/.test(a.toAddress);
     if (!isImplicit && !(await chain.accountExists(a.toAddress))) fail(`The account ${a.toAddress} doesn't exist yet, so I won't send there.`);
+    onStep(`Sending ${a.amount} NEAR to ${a.toName}`);
     const r = must("The transfer", await chain.transferNative(a.toAddress, amount));
     txs.push(tx("Transfer", r));
     return { ok: true, txs, spoken: `Done. I sent ${a.amount} NEAR to ${a.toName}.`, lines: [`Sent ${a.amount} NEAR to ${a.toName}`] };
@@ -52,9 +55,11 @@ export async function executeSend(a: SendAction, chain: Chain): Promise<ExecResu
     const bounds = await chain.view<{ min: string }>(token.contract, "storage_balance_bounds", {});
     const cost = BigInt(bounds.min);
     if (native < cost + reserve) fail(`Not enough NEAR to register ${a.toName} with ${token.symbol} (${yocto(cost)}).`);
+    onStep(`Registering ${a.toName} with ${token.symbol}`);
     const r = must("Registering the receiver", await chain.call(token.contract, "storage_deposit", { account_id: a.toAddress, registration_only: true }, { depositYocto: cost, gas: 30n * TGAS }));
     txs.push(tx(`Register ${a.toName} with ${token.symbol}`, r));
   }
+  onStep(`Sending ${a.amount} ${token.symbol} to ${a.toName}`);
   const r = must("The transfer", await chain.call(token.contract, "ft_transfer", { receiver_id: a.toAddress, amount: amountUnits.toString() }, { depositYocto: 1n, gas: 30n * TGAS, waitUntil: "FINAL" }));
   txs.push(tx("Transfer", r));
   return { ok: true, txs, spoken: `Done. I sent ${a.amount} ${token.symbol} to ${a.toName}.`, lines: [`Sent ${a.amount} ${token.symbol} to ${a.toName}`] };
@@ -63,7 +68,7 @@ export async function executeSend(a: SendAction, chain: Chain): Promise<ExecResu
 // ---------- swap through Rhea SmartRouterV2 ----------
 export type SwapDeps = { fetchRoute: (from: string, to: string, amount: string) => Promise<{ route: RheaRoute; feeOn: boolean }> };
 
-export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDeps): Promise<ExecResult> {
+export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDeps, onStep: OnStep = () => {}): Promise<ExecResult> {
   const from = findToken(a.from);
   const to = findToken(a.to);
   const txs: ExecResult["txs"] = [];
@@ -72,6 +77,7 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
   const amountIn = BigInt(toUnits(a.amount, from.decimals));
 
   // 1. A fresh route (quotes are short-lived), and a drift check against what the owner approved.
+  onStep("Getting a fresh route from Rhea");
   const { route, feeOn } = await deps.fetchRoute(a.from, a.to, a.amount);
   const gross = BigInt(route.amount_out);
   const fresh = feeOn ? applyFee(gross, config.feePerMille) : gross;
@@ -79,6 +85,7 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
   const floor = (approved * BigInt(Math.round((100 - config.maxDriftPct) * 100))) / 10000n;
   if (fresh < floor) fail(`The price moved: you approved about ${fromUnits(approved, to.decimals)} ${to.symbol} but it's now about ${fromUnits(fresh, to.decimals)}. Ask me again to get a new quote.`);
 
+  onStep("Checking the price has not moved");
   // 2. Registrations the router needs: the user on the aggregator, and the user, aggregator and fee recipient on every token of the route.
   const tokens = route.tokens;
   const native = await chain.nativeBalance();
@@ -112,6 +119,7 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
   const before = to.contract === null ? native : BigInt(await chain.view<string>(to.contract, "ft_balance_of", { account_id: me }));
 
   // 3. Register what is missing.
+  if (storageTodo.length || routerTodo.length) onStep("Registering Orbi's accounts (one time)");
   for (const s of storageTodo) {
     const r = must(`Registering ${s.account} on ${s.token}`, await chain.call(s.token, "storage_deposit", { account_id: s.account, registration_only: true }, { depositYocto: perToken, gas: 30n * TGAS }));
     txs.push(tx(`Register ${s.account === me ? "Orbi" : s.account} on ${s.token}`, r));
@@ -124,15 +132,18 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
 
   // 4. Native NEAR has to be wrapped first.
   if (from.contract === null) {
+    onStep("Wrapping NEAR");
     const r = must("Wrapping NEAR", await chain.call("wrap.near", "near_deposit", {}, { depositYocto: amountIn, gas: 10n * TGAS }));
     txs.push(tx("Wrap NEAR", r));
   }
 
   // 5. The swap itself: ft_transfer_call to the router with its signed route.
+  onStep(`Swapping ${a.amount} ${from.symbol} on Rhea`);
   const r = must("The swap", await chain.call(from.swapContract, "ft_transfer_call", { receiver_id: AGGREGATOR, amount: amountIn.toString(), msg: JSON.stringify({ msg: route.msg, signature: route.signature }) }, { depositYocto: 1n, gas: 300n * TGAS, waitUntil: "FINAL" }));
   txs.push(tx("Swap", r));
 
   // 6. Report what really arrived, not what was promised.
+  onStep("Checking what arrived");
   const afterBal = to.contract === null ? await chain.nativeBalance() : BigInt(await chain.view<string>(to.contract, "ft_balance_of", { account_id: me }));
   const got = afterBal - before;
   const gotText = got > 0n ? `${fromUnits(got, to.decimals, 4)} ${to.symbol}${to.contract === null ? " (after fees)" : ""}` : "nothing yet";

@@ -11,6 +11,7 @@ import { findToken, fromUnits, toUnits } from "./tokens.ts";
 import { resolveContact, recordSend } from "./contacts.ts";
 import { multiUser, ownerOf, ipHashOf } from "./owner.ts";
 import { realChain, explorerTx, type Chain } from "./chain.ts";
+import { startRun, stepStart, endRun } from "./progress.ts";
 import { executeSend, executeSwapRhea, simulate, ExecError, type Action, type ExecResult, type SendAction, type SwapAction, type SwapDeps } from "./executor.ts";
 import { compareRoutes, rheaRoute } from "./quotes.ts";
 import { getPrices } from "./research.ts";
@@ -28,6 +29,7 @@ export type Card = {
   lines: string[];
   warnings: string[];
   address?: string; // full destination address, shown in full so the owner can verify it
+  to?: string; // the saved contact's name (a send), shown as the destination on the card
   usd: number;
   expiresAt: number;
 };
@@ -218,7 +220,7 @@ export async function proposeSend(session: string, input: { token: string; amoun
   } else warnings.push("Rehearsal mode: approving will not send anything.");
 
   const action: SendAction = { kind: "send", token: symbol, amount, toName: contact.name, toAddress: contact.address };
-  return open(session, { session, action, usd, status: "pending", contactName: contact.name, card: { kind: "send", title: `Send ${amount} ${symbol} to ${contact.name}`, lines: [`Amount: ${amount} ${symbol} (about ${usd2(usd)})`, `To: ${contact.name}`, "Network fee: about 0.001 NEAR, or about 0.007 NEAR (a few cents) if this creates a new account"], warnings, address: contact.address, usd } }, deps);
+  return open(session, { session, action, usd, status: "pending", contactName: contact.name, card: { kind: "send", to: contact.name, title: `Send ${amount} ${symbol} to ${contact.name}`, lines: [`Amount: ${amount} ${symbol} (about ${usd2(usd)})`, `To: ${contact.name}`, "Network fee: about 0.001 NEAR, or about 0.007 NEAR (a few cents) if this creates a new account"], warnings, address: contact.address, usd } }, deps);
 }
 
 // ---------------- propose: swap ----------------
@@ -274,21 +276,25 @@ export async function approve(session: string, id: string, hash: string, policy:
   if (locked && liveBusy) throw new ApprovalError("Another approval is being processed right now. Wait a few seconds and tap Approve again. Nothing was done."); // the card stays open
   if (locked) liveBusy = true;
   p.status = "executing"; // set before any await so a double tap cannot run it twice
+  startRun(id, session);
+  const onStep = (label: string) => stepStart(id, label);
   audit({ event: "approved", session, id, action: p.action, mode: config.executionMode });
   try {
     let result: ExecResult;
     if (config.executionMode === "rehearsal") result = simulate(p.action);
     else if (config.executionMode === "live") {
       const chain = deps.chain();
-      result = p.action.kind === "send" ? await executeSend(p.action, chain) : await executeSwapRhea(p.action, chain, deps.swapDeps);
+      result = p.action.kind === "send" ? await executeSend(p.action, chain, onStep) : await executeSwapRhea(p.action, chain, deps.swapDeps, onStep);
       recordSpend(p.usd, policy);
       if (p.action.kind === "send" && p.contactName) recordSend(p.contactName, ownerOf(session));
     } else throw new ApprovalError("Sending and swapping are turned off right now.");
     p.status = "done";
+    endRun(id, result.ok);
     audit({ event: "done", session, id, ok: result.ok, simulated: Boolean(result.simulated), txs: result.txs.map((t) => t.hash) });
     return { ok: result.ok, simulated: Boolean(result.simulated), spoken: result.spoken, lines: result.lines, txs: result.txs };
   } catch (e) {
     p.status = "failed";
+    endRun(id, false);
     const msg = e instanceof ExecError || e instanceof ApprovalError ? e.message : "Something went wrong and I stopped. Please check the wallet before trying again.";
     audit({ event: "failed", session, id, error: (e as Error).message });
     throw new ApprovalError(msg);

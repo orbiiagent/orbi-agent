@@ -85,7 +85,7 @@
   #checked:empty { display: none; }
 
   /* approval card */
-  #card { max-height: 56dvh; overflow-y: auto; overflow-x: hidden; background: linear-gradient(180deg, rgba(26, 32, 50, .85), rgba(14, 18, 28, .85)); border: 1px solid var(--line2); border-radius: 22px; padding: 20px; text-align: left; backdrop-filter: blur(16px); box-shadow: 0 22px 60px rgba(0, 0, 0, .5); }
+  #card { max-height: 56dvh; overflow-y: auto; overflow-x: hidden; background: radial-gradient(120% 70% at 50% -10%, rgba(140, 160, 255, .16), transparent 60%), linear-gradient(180deg, #1a2032, #0d111b); border: 1px solid rgba(255, 255, 255, .12); border-radius: 24px; padding: 20px; text-align: left; box-shadow: 0 1px 0 rgba(255, 255, 255, .22) inset, 0 -1px 0 rgba(0, 0, 0, .5) inset, 0 2px 4px rgba(0, 0, 0, .4), 0 14px 28px rgba(0, 0, 0, .45), 0 40px 90px rgba(0, 0, 0, .6), 0 0 60px rgba(122, 107, 255, .16); }
   #card[hidden] { display: none; }
   #card:not([hidden]) { animation: cardIn .4s cubic-bezier(.2, .8, .2, 1); }
   @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -93,15 +93,14 @@
     #card { width: 410px; align-self: center; max-height: calc(100dvh - 150px); }
     #card:not([hidden]) { animation: none; }
   }
-  #card.live { border-color: rgba(255, 120, 120, .45); box-shadow: 0 0 0 1px rgba(255, 120, 120, .12), 0 22px 60px rgba(0, 0, 0, .5); }
+  #card.live { }   /* a live card looks like any other: the red outline was out of line with the theme */
   #card .tag { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--warn); background: rgba(245, 194, 107, .1); border: 1px solid rgba(245, 194, 107, .3); border-radius: 999px; padding: 4px 11px; margin-bottom: 12px; }
-  #card.live .tag { color: #ffb4b4; background: rgba(255, 120, 120, .1); border-color: rgba(255, 120, 120, .38); }
   #card h2 { font-size: 22px; line-height: 1.25; margin: 0 0 14px; font-weight: 650; letter-spacing: -.015em; }
   #card .kv { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
   #card .kv .k { color: var(--dim); flex: none; }
   #card .kv .v { text-align: right; color: var(--text); overflow-wrap: anywhere; }
   #card .line { color: var(--dim); font-size: 14px; padding: 8px 0; border-top: 1px solid var(--line); }
-  #card .addr { margin: 12px 0; padding: 12px 14px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line2); border-radius: 14px; }
+  #card .addr { margin: 12px 0; padding: 12px 14px; background: linear-gradient(180deg, rgba(0, 0, 0, .5), rgba(0, 0, 0, .28)); border: 1px solid rgba(255, 255, 255, .12); border-radius: 16px; box-shadow: 0 2px 6px rgba(0, 0, 0, .5) inset, 0 1px 0 rgba(255, 255, 255, .07); }
   #card .addr .k { display: block; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .09em; margin-bottom: 6px; }
   #card .addr code { font: 14px/1.55 ui-monospace, Menlo, monospace; color: var(--text); word-break: break-all; }
   #card .warn { color: var(--warn); font-size: 13px; padding: 9px 12px; margin: 6px 0; border-left: 3px solid var(--warn); background: rgba(245, 194, 107, .07); border-radius: 0 10px 10px 0; }
@@ -119,14 +118,77 @@
   #card .qrnote { font-size: 12px; color: var(--dim); margin-top: 6px; }
   #card .cp { margin-top: 10px; }
   #card .cp button { padding: 8px 16px; }
-  #card .row2 { display: flex; gap: 10px; align-items: center; margin: 14px -20px -20px; padding: 12px 20px 18px; flex-wrap: wrap; position: sticky; bottom: -20px; background: linear-gradient(180deg, rgba(14, 18, 28, 0), #0e121c 14px); border-radius: 0 0 22px 22px; }
-  #card button { min-height: 46px; padding: 0 22px; border-radius: 14px; font-weight: 600; font-size: 15px; cursor: pointer; border: 1px solid var(--line2); background: rgba(255, 255, 255, .04); color: var(--text); transition: transform .12s, background .2s; }
+  #card .row2 { display: flex; gap: 10px; align-items: center; margin: 14px -20px -20px; padding: 12px 20px 18px; flex-wrap: wrap; position: sticky; bottom: -20px; background: linear-gradient(180deg, rgba(13, 17, 27, 0), #0d111b 16px); border-radius: 0 0 24px 24px; }
+  #card button { min-height: 46px; padding: 0 22px; border-radius: 999px; font-weight: 600; font-size: 15px; cursor: pointer; border: 1px solid rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .05); box-shadow: 0 1px 0 rgba(255, 255, 255, .1) inset, 0 4px 10px rgba(0, 0, 0, .35); color: var(--text); transition: transform .12s, background .2s; }
   #card button:hover:not(:disabled) { background: rgba(255, 255, 255, .09); }
-  #card button.go { flex: 1; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #08101f; border: 0; }
+  #card button.go { flex: 1; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #08101f; border: 0; box-shadow: 0 1px 0 rgba(255, 255, 255, .55) inset, 0 -2px 0 rgba(60, 40, 160, .35) inset, 0 8px 22px rgba(122, 107, 255, .5), 0 2px 6px rgba(0, 0, 0, .4); }
   #card button.go:hover:not(:disabled) { transform: translateY(-1px); background: linear-gradient(135deg, #8fb0ff, #b39eff); }
   #card button:disabled { opacity: .45; cursor: default; }
   #card .timer { width: 100%; font-size: 12px; color: var(--dim); }
   #card a { color: #9db8ff; font: 13px ui-monospace, Menlo, monospace; word-break: break-all; }
+  /* modern card: big amount, where it goes, then the stages after Approve */
+  #card .hero { margin: 2px 0 16px; }
+  #card .hero .verb { display: none; }
+  #card .hero .amt { font-size: 38px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin-top: 2px; color: #fff; text-shadow: 0 2px 18px rgba(140, 160, 255, .35); }
+  #card .hero .amt small { font-size: 20px; font-weight: 600; color: #fff; margin-left: 8px; font-size: 38px; }
+  #card .hero.swap .amt small { font-size: 30px; }
+  #card .hero.swap .amt { font-size: 30px; }
+  #card .hero .arrow { color: var(--accent); margin: 0 10px; font-weight: 500; }
+  #card .hero .usd { color: var(--dim); font-size: 14px; margin-top: 2px; }
+  #card .flow { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; }
+  #card .node { position: relative; flex: none; display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 14px; background: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .04)); border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 1px 0 rgba(255, 255, 255, .14) inset, 0 6px 14px rgba(0, 0, 0, .4); font-size: 14px; font-weight: 600; transition: border-color .4s, box-shadow .4s, background .4s; max-width: 46%; overflow-wrap: anywhere; }
+  #card .node .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  #card .node.to .dot { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+  #card .node.receiving { border-color: rgba(164, 139, 255, .7); background: rgba(164, 139, 255, .1); animation: glow 1.6s ease-in-out infinite; }
+  #card .node.receiving::before, #card .node.receiving::after { content: ""; position: absolute; inset: -1px; border-radius: 15px; border: 2px solid var(--accent2); opacity: 0; animation: ripple 1.8s ease-out infinite; pointer-events: none; }
+  #card .node.receiving::after { animation-delay: .9s; }
+  #card .node.arrived { border-color: var(--ok); background: rgba(110, 231, 183, .12); box-shadow: 0 0 22px rgba(110, 231, 183, .35); animation: burst .7s ease-out; }
+  #card .node.arrived .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  #card .node.arrived::after { content: "\2713"; margin-left: 2px; color: var(--ok); font-weight: 700; }
+  #card .node.failed { border-color: var(--bad); background: rgba(255, 143, 143, .1); }
+  @keyframes ripple { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.35, 1.9); opacity: 0; } }
+  @keyframes glow { 0%, 100% { box-shadow: 0 0 0 rgba(164, 139, 255, 0); } 50% { box-shadow: 0 0 22px rgba(164, 139, 255, .55); } }
+  @keyframes burst { 0% { transform: scale(1); } 35% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  #card .wire { position: relative; flex: 1; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity: .55; border-radius: 2px; min-width: 24px; }
+  #card .wire.run { opacity: 1; }
+  #card .wire.run b { position: absolute; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #fff; box-shadow: 0 0 12px var(--accent); animation: travel 1.2s linear infinite; }
+  #card .wire.run b:nth-child(2) { animation-delay: .4s; } #card .wire.run b:nth-child(3) { animation-delay: .8s; }
+  @keyframes travel { from { left: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } to { left: calc(100% - 8px); opacity: 0; } }
+  #card .wire.ok { background: var(--ok); opacity: 1; }
+  #card .wire.bad { background: var(--bad); opacity: .8; }
+  #card .stages { list-style: none; margin: 4px 0 6px; padding: 0; }
+  #card .stages li { position: relative; display: flex; gap: 14px; align-items: flex-start; padding: 0 0 18px; font-size: 15px; color: var(--dim); transition: color .3s; }
+  #card .stages li:last-child { padding-bottom: 2px; }
+  #card .stages li::before { content: ""; position: absolute; left: 11px; top: 26px; bottom: 2px; width: 2px; background: var(--line2); }
+  #card .stages li:last-child::before { display: none; }
+  #card .stages li.done::before { background: var(--ok); opacity: .6; }
+  #card .stages .ic { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; border: 2px solid rgba(255, 255, 255, .22); font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, .06); transition: all .3s; }
+  #card .stages .t { padding-top: 1px; overflow-wrap: anywhere; }
+  #card .stages .sub2 { display: block; font-size: 12.5px; color: var(--dim); font-weight: 400; margin-top: 1px; }
+  #card .stages li.done, #card .stages li.skipped { color: var(--text); }
+  #card .stages li.done .ic { background: rgba(110, 231, 183, .14); border-color: var(--ok); color: var(--ok); }
+  #card .stages li.skipped { color: var(--dim); } #card .stages li.skipped .ic { border-color: var(--line2); color: var(--dim); }
+  #card .stages li.doing { color: var(--text); font-weight: 600; } #card .stages li.doing .ic { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+  #card .stages li.failed { color: var(--bad); } #card .stages li.failed .ic { border-color: var(--bad); color: var(--bad); background: rgba(255, 143, 143, .12); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #card .badge { animation: pop .5s cubic-bezier(.2, 1.4, .4, 1); }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } }
+  #card .who { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; }
+  #card .av { flex: none; width: 42px; height: 42px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #b9c6ff 40%, #7a6bff 75%); box-shadow: 0 6px 16px rgba(0, 0, 0, .5), 0 0 26px rgba(122, 107, 255, .5), inset 0 -3px 6px rgba(60, 40, 160, .4); }
+  #card .who b { display: block; font-size: 16px; font-weight: 650; } #card .who span { display: block; font-size: 14px; color: var(--dim); }
+  #card .okline { display: flex; align-items: center; gap: 8px; color: var(--ok); font-size: 15px; font-weight: 500; margin: 2px 0 14px; }
+  #card .okline i { width: 20px; height: 20px; border-radius: 50%; background: rgba(110, 231, 183, .14); display: grid; place-items: center; font-style: normal; font-size: 12px; }
+  #card .det { margin: 0 0 12px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 16px; background: rgba(0, 0, 0, .22); box-shadow: 0 2px 6px rgba(0, 0, 0, .35) inset, 0 1px 0 rgba(255, 255, 255, .06); }
+  #card .det summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-size: 14px; font-weight: 600; user-select: none; }
+  #card .det summary::-webkit-details-marker { display: none; }
+  #card .det summary em { margin-left: auto; font-style: normal; font-weight: 400; font-size: 13px; color: var(--dim); font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; text-align: right; }
+  #card .det summary i { flex: none; width: 8px; height: 8px; border-right: 2px solid var(--dim); border-bottom: 2px solid var(--dim); transform: rotate(45deg) translateY(-2px); transition: transform .25s; }
+  #card .det[open] summary i { transform: rotate(-135deg) translateY(-2px); }
+  #card .det[open] summary em { opacity: 0; }
+  #card .det > .kv, #card .det > .line, #card .det > .addr { margin-left: 14px; margin-right: 14px; }
+  #card .det > .kv:first-of-type { border-top: 1px solid rgba(255, 255, 255, .08); }
+  #card .det > .addr { margin-top: 10px; margin-bottom: 14px; }
+  #card .sum { color: var(--dim); font-size: 14px; margin: -8px 0 14px; }
 
   /* bottom dock */
   .bottom { width: 100%; max-width: 1240px; margin: 0 auto; padding: 8px 0 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -820,6 +882,41 @@ let card = null, cardTimer = null;
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function clearCardTimer() { if (cardTimer) { clearInterval(cardTimer); cardTimer = null; } }
 function hideCard() { clearCardTimer(); card = null; awaitingTap = false; if (mode === "idle" && !busy) setMode("idle", idleMsg()); if ($("wake").checked) startWake(); $("card").hidden = true; $("card").textContent = ""; document.body.classList.remove("hasCard"); resize(); }
+// What a card is about, read from its own title, so the card can show a big amount, where it goes and the stages that will follow.
+// These stage names match what the server reports while it works. Nothing here can start or change a transaction.
+function planOf(c) {
+  let m = /^Send (\S+) (\S+) to (.+)$/.exec(c.title || "");
+  if (c.kind === "send" && m) {
+    const [, amt, sym, name] = m, stages = [{ label: "Checking the balance" }];
+    if (sym !== "NEAR") stages.push({ label: `Registering ${name} with ${sym}`, optional: true, skip: "Already registered" });
+    stages.push({ label: `Sending ${amt} ${sym} to ${name}`, recv: true, sub: "Waiting for the network to confirm" });
+    return { kind: "send", amt, sym, dest: name, stages, doing: `Sending ${amt} ${sym} to ${name}` };
+  }
+  m = /^Swap (\S+) (\S+) for about (\S+) (\S+)$/.exec(c.title || "");
+  if (c.kind === "swap" && m) {
+    const [, amt, from, out, to] = m, stages = [{ label: "Getting a fresh route from Rhea" }, { label: "Checking the price has not moved" }, { label: "Registering Orbi's accounts (one time)", optional: true, skip: "Not needed" }];
+    if (from === "NEAR") stages.push({ label: "Wrapping NEAR" });
+    stages.push({ label: `Swapping ${amt} ${from} on Rhea`, recv: true, sub: "Waiting for the network to confirm" }, { label: "Checking what arrived" });
+    return { kind: "swap", amt, sym: from, out, to, dest: "Rhea router", stages, doing: `Swapping ${amt} ${from} for ${to}` };
+  }
+  return null;
+}
+function whoOf(a, b) { const w = el("div", "who"), t = el("div"); t.append(el("b", "", a), el("span", "", b)); w.append(el("span", "av"), t); return w; }
+function heroOf(pl, c) {
+  const h = el("div", "hero" + (pl.kind === "swap" ? " swap" : "")), a = el("div", "amt");
+  h.append(el("div", "verb", pl.kind === "send" ? "You are sending" : "You are swapping"));
+  a.append(document.createTextNode(pl.amt), el("small", "", pl.sym));
+  if (pl.kind === "swap") a.append(el("span", "arrow", "\u2192"), document.createTextNode(pl.out), el("small", "", pl.to));
+  h.append(a);
+  if (typeof c.usd === "number" && c.usd > 0) h.append(el("div", "usd", "about $" + c.usd.toFixed(2) + (pl.kind === "swap" ? " · an estimate, the price can move a little" : "")));
+  return h;
+}
+function flowOf(dest, running) {
+  const f = el("div", "flow"), from = el("div", "node"), w = el("div", "wire"), to = el("div", "node to");
+  from.append(el("span", "dot"), document.createTextNode("Orbi wallet")); to.append(el("span", "dot"), document.createTextNode(dest));
+  if (running) { w.classList.add("run"); w.append(el("b"), el("b"), el("b")); }
+  f.append(from, w, to); return f;
+}
 function showCard(c) {
   if (c.kind === "deposit") return showDeposit(c);
   clearCardTimer(); card = c;
@@ -827,24 +924,32 @@ function showCard(c) {
   setMode("idle", idleMsg());
   const box = $("card"); box.hidden = false; box.className = c.mode === "live" ? "live" : ""; box.textContent = "";
   document.body.classList.add("hasCard"); resize(); box.scrollIntoView({ block: "nearest" });
-  box.append(el("div", "tag", c.mode === "live" ? "Live · real funds on " + c.network : "Rehearsal · nothing will be sent"));
-  box.append(el("h2", "", c.title));
+  if (c.mode !== "live") box.append(el("div", "tag", "Rehearsal · nothing will be sent"));   // no outline for live: the owner sees the mode in the settings and every action needs a tap
+  const pl = planOf(c);
+  box.append(whoOf(pl ? (pl.kind === "send" ? "Orbi wants to send" : "Orbi wants to swap") : "Orbi needs your approval", "Waiting for your approval"));
+  if (pl) { box.append(heroOf(pl, c)); } else box.append(el("h2", "", c.title));
+  const okl = el("div", "okline"); okl.append(el("i", "", "\u2713"), document.createTextNode("Inside your limits")); box.append(okl);
+  if (pl) box.append(flowOf(pl.dest, false));
+  const det = el("details", "det"), sum = el("summary"), short = c.address ? c.address.slice(0, 8) + "\u2026" + c.address.slice(-4) : (pl && pl.kind === "swap" ? "Rhea route" : "");
+  sum.append(el("span", "", "Details"), el("em", "", short), el("i")); det.append(sum);
   for (const l of c.lines) {
+    if (pl && pl.kind === "send" && /^(Amount|To):/.test(l)) continue;   // already shown as the big amount and the destination
     const m = /^([^:]{2,26}):\s+(.+)$/.exec(l);                      // "You give: 1 NEAR" becomes a label and a value
-    if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); box.append(row); }
-    else box.append(el("div", "line", l));
+    if (m) { const row = el("div", "kv"); row.append(el("span", "k", m[1]), el("span", "v", m[2])); det.append(row); }
+    else det.append(el("div", "line", l));
   }
   if (c.address) {
     const a = el("div", "addr"); a.append(el("span", "k", "Full address: check every part"));
-    a.append(el("code", "", c.address.match(/.{1,8}/g).join(" "))); box.append(a);
+    a.append(el("code", "", c.address.match(/.{1,8}/g).join(" "))); det.append(a);
   }
+  box.append(det);
   for (const w of c.warnings) box.append(el("div", "warn", "Note: " + w));
   const row = el("div", "row2");
   const go = el("button", "go", "Approve"); go.type = "button"; go.onclick = approveCard;
   const no = el("button", "", "Cancel"); no.type = "button"; no.onclick = cancelCard;
   const timer = el("span", "timer", ""); timer.id = "cardTimer";
   const total = Math.max(1, c.expiresAt - Date.now()), ttl = el("div", "ttl"), fill = el("i"); ttl.append(fill);
-  row.append(go, no, timer); box.append(ttl, row);
+  row.append(no, go, timer); box.append(ttl, row);
   const tick = () => {
     fill.style.width = Math.max(0, Math.min(100, ((c.expiresAt - Date.now()) / total) * 100)) + "%";
     const left = Math.max(0, Math.round((c.expiresAt - Date.now()) / 1000));
@@ -915,16 +1020,90 @@ function cardResult(ok, lines, txs) {
   const close = el("button", "", "Close"); close.type = "button"; close.onclick = hideCard;
   const row = el("div", "row2"); row.append(close); box.append(row);
 }
+// After Approve the card turns into the stages of the transaction. Every stage is visible from the start; they tick off as the server reports them.
+function startStages(c, pl) {
+  const box = $("card"), rehearsal = c.mode !== "live";
+  box.textContent = "";
+  if (rehearsal) box.append(el("div", "tag", "Rehearsal · nothing will be sent"));
+  box.append(whoOf(pl.kind === "send" ? "Orbi is sending" : "Orbi is swapping", "Please keep this open"));
+  const title = el("h2", "", pl.doing), sums = el("div"), flow = flowOf(pl.dest, true), ul = el("ul", "stages"), after = el("div");
+  box.append(title, sums, flow, ul, after);
+  const to = flow.querySelector(".node.to"), wire = flow.querySelector(".wire");
+  const base = rehearsal ? [{ label: "Checking the limits" }, { label: "Building the transaction" }, { label: "Nothing is signed or sent" }] : pl.stages;
+  const items = base.map((x) => ({ ...x, state: "pending" }));
+  const paint = (it) => {
+    if (!it.li) { it.li = el("li"); it.ic = el("span", "ic"); it.t = el("span", "t"); it.li.append(it.ic, it.t); ul.append(it.li); }
+    it.li.className = it.state === "pending" ? "" : it.state;
+    it.ic.textContent = it.state === "done" ? "\u2713" : it.state === "failed" ? "\u2715" : it.state === "skipped" ? "\u2013" : "";
+    it.t.textContent = it.label;
+    const sub = it.state === "skipped" ? it.skip : it.state === "doing" ? it.sub : "";
+    if (sub) it.t.append(el("span", "sub2", sub));
+  };
+  items.forEach(paint);
+  let real = false;
+  const setRecv = (on) => { to.classList.toggle("receiving", on); };
+  const api = {
+    get real() { return real; },
+    update(steps) {
+      for (const st of steps) {
+        let i = items.findIndex((x) => x.label === st.label);
+        if (i < 0) { items.push({ label: st.label, state: "pending" }); i = items.length - 1; }
+        real = true;
+        for (let k = 0; k < i; k++) if (items[k].state === "pending" || items[k].state === "doing") items[k].state = items[k].optional ? "skipped" : "done";
+        items[i].state = st.state;
+        if (items[i].recv) setRecv(st.state === "doing");
+      }
+      items.forEach(paint);
+    },
+    tickFake(n) {   // a rehearsal has no real steps: play a short, honest one
+      const i = Math.min(n, items.length - 1);
+      for (let k = 0; k < items.length; k++) items[k].state = k < i ? "done" : k === i ? "doing" : "pending";
+      items.forEach(paint);
+    },
+    finish(ok, j) {
+      for (const it of items) { if (it.state === "pending" || it.state === "doing") it.state = ok ? (it.optional ? "skipped" : "done") : it.state === "doing" ? "failed" : "pending"; paint(it); }
+      setRecv(false); to.classList.add(ok ? "arrived" : "failed"); wire.className = "wire " + (ok ? "ok" : "bad"); wire.textContent = "";
+      title.textContent = ok ? "Done" : "Not done"; title.className = ok ? "ok" : "bad";
+      const who = box.querySelector(".who"); if (who) { who.querySelector("b").textContent = ok ? "Orbi finished" : "Orbi stopped"; who.querySelector("span").textContent = ok ? "All steps complete" : "See what happened below"; }
+      const badge = el("div", "badge " + (ok ? "ok" : "bad"), ok ? "\u2713" : "!"); box.insertBefore(badge, title);
+      for (const l of j.lines || []) sums.append(el("div", ok ? "ok" : "bad", l));
+      for (const t of j.txs || []) {
+        const row = el("div", "line", t.label + ": ");
+        if (t.url) { const a = el("a", "", t.hash.slice(0, 10) + "\u2026"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer"; row.append(a); } else row.append(document.createTextNode(t.hash));
+        after.append(row);
+      }
+      const close = el("button", "", "Close"); close.type = "button"; close.onclick = hideCard;
+      const row = el("div", "row2"); row.append(close); box.append(row);
+      box.scrollTop = 0;
+    },
+  };
+  return api;
+}
 async function approveCard() {
   if (!card) return;
-  const c = card, buttons = $("card").querySelectorAll("button"); buttons.forEach((b) => (b.disabled = true));
+  const c = card, pl = planOf(c), buttons = $("card").querySelectorAll("button"); buttons.forEach((b) => (b.disabled = true));
   awaitingTap = false; clearCardTimer(); $("cardTimer") && ($("cardTimer").textContent = "Working…"); setMode("thinking", "Working on it…");
+  const view = pl ? startStages(c, pl) : null;
+  let polling = false, stop = false, n = 0;
+  const poll = async () => {
+    if (!view || polling || stop) return; polling = true;
+    try {
+      if (c.mode !== "live") view.tickFake(n++);
+      else { const r = await (await fetch("/api/progress?session=" + encodeURIComponent(session) + "&id=" + encodeURIComponent(c.id))).json(); if (!stop && r && r.steps && r.steps.length) view.update(r.steps); }
+    } catch {} polling = false;
+  };
+  const pt = view ? setInterval(poll, c.mode === "live" ? 700 : 650) : null; poll();
   try {
     const r = await fetch("/api/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, id: c.id, hash: c.hash }) });
-    const j = await r.json();
+    const j = await r.json(); stop = true; if (pt) clearInterval(pt);
     if (!r.ok) throw new Error(j.error || "Request failed");
-    cardResult(j.ok, j.lines, j.txs); setMode("idle", idleMsg()); showOrbi(j.spoken); await say(j.spoken, {});
-  } catch (e) { cardResult(false, [e.message], []); setMode("idle", idleMsg()); showOrbi(e.message); await say(e.message, {}); }
+    if (view) view.finish(j.ok, j); else cardResult(j.ok, j.lines, j.txs);
+    setMode("idle", idleMsg()); showOrbi(j.spoken); await say(j.spoken, {});
+  } catch (e) {
+    stop = true; if (pt) clearInterval(pt);
+    if (view && view.real) view.finish(false, { lines: [e.message], txs: [] }); else cardResult(false, [e.message], []);
+    setMode("idle", idleMsg()); showOrbi(e.message); await say(e.message, {});
+  }
 }
 async function cancelCard() {
   if (!card) return; const c = card; awaitingTap = false; hideCard();

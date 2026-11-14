@@ -451,3 +451,15 @@ test("a daily cap on the number of real actions stops further ones", async () =>
     config.maxLiveActionsPerDay = 0;
   }
 });
+
+test("the executor reports plain-word steps in order and they never include an address", async () => {
+  const steps: string[] = [];
+  const views = (c: string, mth: string) => (mth === "ft_balance_of" ? "5000000" : mth === "storage_balance_of" ? null : mth === "storage_balance_bounds" ? { min: REG.total, max: REG.total } : null);
+  const m = mockChain({ views });
+  await executeSend({ kind: "send", token: "USDC", amount: "2", toName: "Treasury", toAddress: FEE_WALLET }, m.chain, (l: string) => steps.push(l));
+  assert.deepEqual(steps, ["Checking the balance", "Registering Treasury with USDC", "Sending 2 USDC to Treasury"]);
+  assert.ok(steps.every((s) => !s.includes(FEE_WALLET)));
+  const plain = mockChain({ views });
+  await executeSend({ kind: "send", token: "USDC", amount: "2", toName: "Treasury", toAddress: FEE_WALLET }, plain.chain);
+  assert.deepEqual(plain.calls.map((c) => c.method), m.calls.map((c) => c.method));
+});

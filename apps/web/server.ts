@@ -12,6 +12,7 @@ import { synthesize, voiceEnabled, VoiceError, stats, inFlightLimit } from "../a
 import { fixSpeech } from "../agent/src/speechfix.ts";
 import { approve, reject, openCard, ApprovalError } from "../agent/src/actions.ts";
 import { policyState } from "../agent/src/tools.ts";
+import { getRun } from "../agent/src/progress.ts";
 import { openDeposit, depositStatus, getRefundAddress, setRefundAddress, BridgeError } from "../agent/src/bridge.ts";
 import { listNotes, forgetNote, clearNotes, memoryEnabled } from "../agent/src/memory.ts";
 import { computeHabits } from "../agent/src/habits.ts";
@@ -184,6 +185,11 @@ const server = createServer(async (req, res) => {
       const sid = String(url.searchParams.get("session") ?? "");
       if (!sessionBelongsTo(sid, owner)) return json(res, 200, { card: null });
       return json(res, 200, { card: openCard(sid) ?? openDeposit(sid) });
+    }
+    if (req.method === "GET" && url.pathname === "/api/progress") {
+      const sid = String(url.searchParams.get("session") ?? "");
+      if (!sessionBelongsTo(sid, owner)) return json(res, 403, { error: "Not your session" });
+      return json(res, 200, getRun(sid, String(url.searchParams.get("id") ?? "")) ?? { status: "none", steps: [] });
     }
     if (req.method === "GET" && url.pathname === "/api/deposit-status") {
       try {
