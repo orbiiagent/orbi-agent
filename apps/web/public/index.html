@@ -527,8 +527,9 @@ function say(text, opts = {}) {
   return sayBrowser(text, opts);
 }
 // After Orbi finishes speaking outside a chat turn (a result, a cancel, a deposit), the screen must go back to idle, or it stays on "Orbi is speaking".
-async function sayAndSettle(text) {
+async function sayAndSettle(text, o = {}) {
   await say(text, {});
+  if (o.listen && !busy && !recording && !isSpeaking() && !awaitingTap) { listenOnce({ followUp: true }); return; }   // after a transaction: keep listening, no need to say "Hey Orbi" again
   if (mode === "speaking" && !isSpeaking() && !busy) { setMode("idle", idleMsg()); if ($("wake").checked && !awaitingTap) startWake(); }
 }
 function stopSpeaking() {
@@ -765,15 +766,8 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let wakeRec = null, wakeTimer = null;
 // Speech recognition often writes "Orbi" as another word, and "HeyOrbi" as one word, so accept the usual mishearings.
 const WAKE_RE = /\b(?:(?:hey|hi|hay|okay|ok|a|hello)\s*)?(?:orbi|orby|orbie|orbit|orbee|orbe|orby|orbs|or be|or b|oh be|obi|orpie|arbi|arby)\b[\s,.!?]*/i;
-let chimeCtx = null;
-function chime() {   // a very short, soft two-note sound: heard instantly, costs nothing, and is gone before Orbi starts listening
-  if ($("mute").checked) return;
-  try {
-    chimeCtx = chimeCtx || new (window.AudioContext || window.webkitAudioContext)(); if (chimeCtx.state === "suspended") chimeCtx.resume().catch(() => {});
-    const t = chimeCtx.currentTime;
-    [[660, 0], [880, 0.07]].forEach(([f, d]) => { const o = chimeCtx.createOscillator(), g = chimeCtx.createGain(); o.frequency.value = f; o.connect(g); g.connect(chimeCtx.destination); g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(0.06, t + d + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.13); o.start(t + d); o.stop(t + d + 0.14); });
-  } catch {}
-}
+const GREETS = ["Yes?", "I'm here.", "Go ahead.", "Yep?"];   // very short, kept ready (prefetched once), so "Hey Orbi" is answered at once
+let lastGreet = "";
 function startWake() {
   if (awaitingTap) return;
   if (engineState === "loading" || engineState === "on") return;   // the on-device engine is in charge
@@ -800,8 +794,9 @@ async function wakeHit(rest) {
   stopWake();
   if (rest.split(/\s+/).filter(Boolean).length >= 2) { ask(rest, true); return; }   // asked in the same breath
   ensureAudio();
-  // Natural talking: no spoken greeting to wait through. A soft chime, then Orbi is already listening.
-  showUser(""); showOrbi(""); chime();
+  let g; do { g = GREETS[Math.floor(Math.random() * GREETS.length)]; } while (g === lastGreet); lastGreet = g;
+  showUser(""); showOrbi(g); setMode("speaking", g);
+  await say(g, {});                                    // one or two words, already loaded: then straight to listening
   if (!busy && !recording) listenOnce({ followUp: true });
 }
 // Chrome sometimes ends or silently drops the listener: check every 2 seconds and bring it back.
@@ -1004,7 +999,7 @@ function showDeposit(c) {
       if (j.state === "done" || j.state === "refunded" || j.state === "failed" || j.state === "expired") {
         finished = true; status.className = "line " + (j.state === "done" ? "ok" : "bad");
         if (j.txUrl) { const l = el("a", "", "View the transaction"); l.href = j.txUrl; l.target = "_blank"; l.rel = "noopener noreferrer"; box.insertBefore(l, ttl); }
-        if (!busy) { showOrbi(j.spoken); sayAndSettle(j.spoken); }
+        if (!busy) { showOrbi(j.spoken); sayAndSettle(j.spoken, { listen: true }); }
       }
     } catch {} busyPoll = false;
   };
@@ -1111,11 +1106,11 @@ async function approveCard() {
     const j = await r.json(); stop = true; if (pt) clearInterval(pt);
     if (!r.ok) throw new Error(j.error || "Request failed");
     if (view) view.finish(j.ok, j); else cardResult(j.ok, j.lines, j.txs);
-    setMode("idle", idleMsg()); showOrbi(j.spoken); await sayAndSettle(j.spoken);
+    setMode("idle", idleMsg()); showOrbi(j.spoken); await sayAndSettle(j.spoken, { listen: true });
   } catch (e) {
     stop = true; if (pt) clearInterval(pt);
     if (view && view.real) view.finish(false, { lines: [e.message], txs: [] }); else cardResult(false, [e.message], []);
-    setMode("idle", idleMsg()); showOrbi(e.message); await sayAndSettle(e.message);
+    setMode("idle", idleMsg()); showOrbi(e.message); await sayAndSettle(e.message, { listen: true });
   }
 }
 async function cancelCard() {
@@ -1189,7 +1184,7 @@ fetch("/api/status").then((r) => r.json()).then((s) => {
   if (s.voice === "elevenlabs") {
     voiceMode = "elevenlabs";
     // short phrases ready to play instantly: one at a time and low priority, so they never compete with a real answer
-    (async () => { for (const a of [...ACKS, ...HMMS]) { try { clipCache.set(a, await fetchClip(a, undefined, undefined, true)); } catch {} } })();
+    (async () => { for (const a of [...GREETS, ...ACKS, ...HMMS]) { try { clipCache.set(a, await fetchClip(a, undefined, undefined, true)); } catch {} } })();
   }
 }).catch(() => {});
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
