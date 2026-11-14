@@ -212,12 +212,12 @@
   <div id="settings" role="dialog" aria-label="Settings">
     <div id="settingsHead"><b>Settings</b><button class="tb" id="setClose" type="button">Close</button></div>
     <h4>Listening</h4>
-    <label><input type="checkbox" id="wake"> <span>Wake word: <b id="wakePhrase" style="font-weight:600;color:var(--text)">Hey Orbi</b>. Detected on this device with openWakeWord; no audio leaves your computer while it waits.</span></label>
+    <label><input type="checkbox" id="wake" checked> <span>Wake word: <b id="wakePhrase" style="font-weight:600;color:var(--text)">Hey Orbi</b>. Detected on this device with openWakeWord; no audio leaves your computer while it waits.</span></label>
     <label><input type="checkbox" id="fast" checked> <span>Fast listening: use the browser's live transcription (quicker; your voice goes to the browser vendor, for example Google in Chrome). Untick for private transcription with Whisper on NEAR AI Cloud.</span></label>
     <label class="sel"><span>How long Orbi waits after you stop talking</span> <select id="wait"><option value="1000">Quick</option><option value="1800" selected>Normal</option><option value="2600">Patient (slow, thoughtful speech)</option></select></label>
     <label class="sel"><span>Background noise (raise it if Orbi answers TV or people nearby)</span> <select id="noise"><option value="quiet">Quiet room (most sensitive)</option><option value="normal" selected>Normal</option><option value="noisy">Noisy room (strictest)</option></select></label>
     <label><input type="checkbox" id="conv" checked> <span>Keep listening after Orbi answers</span></label>
-    <label><input type="checkbox" id="vi"> <span>Interrupt by voice: start talking while Orbi speaks and it stops and listens (experimental; best with headphones, on speakers Orbi may hear itself)</span></label>
+    <label><input type="checkbox" id="vi" checked> <span>Interrupt by voice: start talking while Orbi speaks and it stops and listens (experimental; best with headphones, on speakers Orbi may hear itself)</span></label>
     <label><input type="checkbox" id="bc" checked> <span>Small acknowledgements while I talk ("mm-hmm")</span></label>
     <h4>Voice</h4>
     <label><input type="checkbox" id="ts" checked> <span>Say "hmm…" in Bella's voice while Orbi thinks, instead of silence</span></label>
@@ -795,6 +795,13 @@ async function viStart() {
     if (viHits >= 5) { viHits = 0; stopSpeaking(); listenOnce({ followUp: true }); }   // about 0.4 s of real speech
   }, 80);
 }
+// "Hey Orbi" and interrupt-by-voice start on by default. The browser asks for the microphone once; if it is blocked, both switch off.
+window.addEventListener("load", async () => {
+  try { const st = navigator.permissions && await navigator.permissions.query({ name: "microphone" }); if (st && st.state === "denied") { $("wake").checked = false; $("vi").checked = false; return; } } catch {}
+  $("wake").onchange(); $("vi").onchange();
+});
+// browsers keep audio paused until the first tap: wake it then
+addEventListener("pointerdown", () => { if (viCtx && viCtx.state === "suspended") viCtx.resume(); }, { once: true });
 $("vi").onchange = () => { if ($("vi").checked) viStart(); else { clearInterval(viTimer); viTimer = null; } };
 
 /* ---------------- controls ---------------- */
@@ -939,6 +946,7 @@ async function checkAi() {
 checkAi(); setInterval(checkAi, 30000);
 
 /* ---------------- contacts ---------------- */
+let HOSTED = false;
 async function loadContacts() {
   try {
     const j = await (await fetch("/api/contacts")).json(); const box = $("contactList"); box.textContent = "";
@@ -948,7 +956,8 @@ async function loadContacts() {
       const a = el("span", "a", c.address); a.title = c.address; row.append(a);
       const del = el("button", "", "Delete"); del.type = "button";
       del.onclick = async () => { await fetch("/api/contacts?name=" + encodeURIComponent(c.name), { method: "DELETE" }); loadContacts(); };
-      row.append(del); box.append(row);
+      if (!HOSTED) row.append(del);   // on the shared demo Treasury can't be removed
+      box.append(row);
     }
   } catch {}
 }
@@ -974,6 +983,7 @@ $("bridgeForm").onsubmit = async (e) => {
 
 fetch("/api/status").then((r) => r.json()).then((s) => {
   if (s.hosted) {
+    HOSTED = true; loadContacts();
     const b = $("demoBanner"); b.hidden = false;
     b.textContent = s.execution === "live"
       ? "Shared demo with a small LIVE test wallet: real funds, tiny amounts (up to $" + s.limits.per_action_usd + " per action). You can swap, and send only to Treasury" + (s.live_actions_per_visitor ? " (" + s.live_actions_per_visitor + " real actions per person per day)" : "") + ". Please do not send your own funds anywhere."
