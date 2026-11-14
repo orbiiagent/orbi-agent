@@ -36,15 +36,16 @@ export const toolDefs = [
     function: {
       name: "propose_send",
       description:
-        "Propose sending tokens to a SAVED CONTACT by name. This only creates an approval card; nothing is sent until the owner taps Approve. Never pass an address: only the contact's name.",
+        "Propose sending tokens to a SAVED CONTACT by name. This only creates an approval card; nothing is sent until the owner taps Approve. Never pass an address: only the contact's name. When the owner says to send ALL, everything, or the max of a token, set max to true and leave amount out: the app works out the exact amount (for NEAR it keeps a small reserve for fees) and shows it on the card, so never refuse a send-all and never compute the amount yourself.",
       parameters: {
         type: "object",
         properties: {
           token: { type: "string", description: "NEAR, USDC or USDT" },
-          amount: { type: "number" },
+          amount: { type: "number", description: "Omit when max is true" },
+          max: { type: "boolean", description: "true when the owner wants to send all or the maximum of this token" },
           to_name: { type: "string", description: "The saved contact's name, exactly as the owner said it" },
         },
-        required: ["token", "amount", "to_name"],
+        required: ["token", "to_name"],
       },
     },
   },

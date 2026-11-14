@@ -184,7 +184,7 @@ function open(session: string, p: Omit<Pending, "id" | "card"> & { card: Omit<Ca
 }
 
 // ---------------- propose: send ----------------
-export async function proposeSend(session: string, input: { token: string; amount: unknown; to_name: string }, policy: PolicyState, deps: Deps = defaultDeps()): Promise<Card> {
+export async function proposeSend(session: string, input: { token: string; amount?: unknown; max?: unknown; to_name: string }, policy: PolicyState, deps: Deps = defaultDeps()): Promise<Card> {
   const capped = visitorCapReason(session);
   if (capped) throw new ProposalError(capped);
   const sendCapped = sendCapReason();
@@ -192,7 +192,26 @@ export async function proposeSend(session: string, input: { token: string; amoun
   const symbol = String(input.token ?? "").toUpperCase();
   if (!SEND_TOKENS.includes(symbol)) throw new ProposalError(`I can send ${SEND_TOKENS.join(", ")}. I can't send ${input.token || "that"}.`);
   const token = findToken(symbol);
-  const amount = parseAmount(input.amount, token.decimals);
+  // "Send all": the amount is worked out here from the real balance (NEAR keeps the fee reserve), then shown on the card like any other amount.
+  const wantsMax = input.max === true || /^(all|max|maximum|everything)$/i.test(String(input.amount ?? "").trim());
+  let maxNote = "";
+  let amount: string;
+  if (wantsMax) {
+    const chain = deps.chain();
+    if (!token.contract) {
+      const reserve = BigInt(Math.round(config.minNativeReserveNear * 1e6)) * 10n ** 18n;
+      const spendable = (await chain.nativeBalance()) - reserve;
+      if (spendable <= 0n) throw new ProposalError(`There's nothing to send: I keep ${config.minNativeReserveNear} NEAR aside for fees and I don't have more than that.`);
+      amount = fromUnits(spendable, 24, 6); // rounded down, so it never asks for more than there is
+      if (!(Number(amount) > 0)) throw new ProposalError("There's too little NEAR above the fee reserve to send.");
+      maxNote = `This is everything above the ${config.minNativeReserveNear} NEAR Orbi keeps aside for fees.`;
+    } else {
+      const bal = BigInt(await chain.view<string>(token.contract, "ft_balance_of", { account_id: chain.accountId }));
+      if (bal <= 0n) throw new ProposalError(`I don't have any ${symbol} to send.`);
+      amount = fromUnits(bal, token.decimals, token.decimals);
+      maxNote = `This is your full ${symbol} balance. The fee is paid in NEAR, so nothing is held back.`;
+    }
+  } else amount = parseAmount(input.amount, token.decimals);
   const spoken = String(input.to_name ?? "").trim();
   if (!spoken) throw new ProposalError("Who should I send it to? Tell me the name of a saved contact.");
   if (looksLikeAddress(spoken)) throw new ProposalError("I don't take addresses by voice, because one misheard letter would send the money to the wrong place. Save the address as a contact first, then ask me by name.");
@@ -218,6 +237,7 @@ export async function proposeSend(session: string, input: { token: string; amoun
       if (bal < BigInt(toUnits(amount, token.decimals))) throw new ProposalError(`I only have ${fromUnits(bal, token.decimals)} ${symbol}.`);
     }
   } else warnings.push("Rehearsal mode: approving will not send anything.");
+  if (maxNote) warnings.push(maxNote);
 
   const action: SendAction = { kind: "send", token: symbol, amount, toName: contact.name, toAddress: contact.address };
   return open(session, { session, action, usd, status: "pending", contactName: contact.name, card: { kind: "send", to: contact.name, title: `Send ${amount} ${symbol} to ${contact.name}`, lines: [`Amount: ${amount} ${symbol} (about ${usd2(usd)})`, `To: ${contact.name}`, "Network fee: about 0.001 NEAR, or about 0.007 NEAR (a few cents) if this creates a new account"], warnings, address: contact.address, usd } }, deps);

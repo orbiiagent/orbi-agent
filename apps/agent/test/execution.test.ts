@@ -466,3 +466,34 @@ test("the executor reports plain-word steps in order and they never include an a
   await executeSend({ kind: "send", token: "USDC", amount: "2", toName: "Treasury", toAddress: FEE_WALLET }, plain.chain);
   assert.deepEqual(plain.calls.map((c) => c.method), m.calls.map((c) => c.method));
 });
+
+// ---------------------------------------------------------------- send all / max
+test("send all NEAR: the amount is the balance minus the fee reserve, shown on the card", async () => {
+  config.maxActionUsd = 1000; config.maxNewAddressUsd = 1000; config.maxDailyUsd = 1000;
+  const m = mockChain({ native: 5n * NEAR + 123_456_789_000_000_000_000_000n });   // 5.123456789 NEAR
+  const c = await proposeSend("s1", { token: "NEAR", max: true, to_name: "Treasury" }, newPolicyState(), deps(m.chain));
+  const reserve = config.minNativeReserveNear;
+  assert.equal(c.title, "Send 4.923456 NEAR to Treasury");   // 5.123456789 - 0.2, rounded DOWN to 6 places (never up)
+  assert.ok(c.warnings.some((w) => /everything above the .* NEAR Orbi keeps aside for fees/.test(w)));
+  assert.ok(Number(c.title.split(" ")[1]) <= 5.123456789 - reserve + 1e-9, "never more than is spendable");
+});
+
+test("send all USDC sends the full token balance; the word 'all' as the amount works too", async () => {
+  config.maxActionUsd = 1000; config.maxNewAddressUsd = 1000; config.maxDailyUsd = 1000;
+  const m = mockChain({ views: (c, mth) => (mth === "ft_balance_of" ? "1785599" : REG) });
+  const c = await proposeSend("s1", { token: "USDC", amount: "all", to_name: "Treasury" }, newPolicyState(), deps(m.chain));
+  assert.equal(c.title, "Send 1.785599 USDC to Treasury");
+  assert.ok(c.warnings.some((w) => /full USDC balance/.test(w)));
+});
+
+test("send all with nothing spendable is refused plainly", async () => {
+  config.maxActionUsd = 1000; config.maxNewAddressUsd = 1000;
+  await assert.rejects(() => proposeSend("s1", { token: "NEAR", max: true, to_name: "Treasury" }, newPolicyState(), deps(mockChain({ native: NEAR / 10n }).chain)), /nothing to send/);
+  await assert.rejects(() => proposeSend("s1", { token: "USDC", max: true, to_name: "Treasury" }, newPolicyState(), deps(mockChain({ views: (c, mth) => (mth === "ft_balance_of" ? "0" : REG) }).chain)), /don't have any USDC/);
+});
+
+test("send all still obeys the per-action limit", async () => {
+  config.maxActionUsd = 1; config.maxNewAddressUsd = 1000;
+  const m = mockChain({ native: 50n * NEAR });
+  await assert.rejects(() => proposeSend("s1", { token: "NEAR", max: true, to_name: "Treasury" }, newPolicyState(), deps(m.chain)), /can't do that one/);
+});

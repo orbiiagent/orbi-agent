@@ -74,6 +74,8 @@ function pricesIntent(t: string): Intent | null {
 // "send 1 NEAR to Mom": the destination is whatever was said after "to"; the tool decides if it is a saved contact.
 // An address spoken aloud is refused by the tool with an explanation, never used.
 function sendIntent(t: string): Intent | null {
+  const all = t.match(/^(?:please\s+)?(?:send|transfer)\s+(?:all|max|maximum|everything|the max|my max|my whole|my full)(?:\s+of)?(?:\s+my)?(?:\s+balance)?(?:\s+of)?\s*(near|usdc|usdt)(?:\s+balance)?\s+to\s+([a-z0-9][a-z0-9 ._-]{0,40}?)(?:\s+please)?[.!?]?$/i);
+  if (all && !/\b(and|then|also|but|plus|after|before|swap|convert|send|transfer|everything|all)\b/i.test(all[2])) return { tool: "propose_send", args: { token: all[1].toUpperCase(), max: true, to_name: all[2].trim() } };
   const m = t.match(new RegExp(`^(?:please\\s+)?(?:send|transfer)\\s+(?:about\\s+)?${NUM}\\s*(near|usdc|usdt)\\s+to\\s+([a-z0-9][a-z0-9 ._-]{0,40}?)(?:\\s+please)?[.!?]?$`, "i"));
   if (!m || !(Number(m[1]) > 0)) return null;
   if (/\b(and|then|also|but|plus|after|before|swap|convert|send|transfer|everything|all)\b/i.test(m[3])) return null; // a second request hides in there: let the model sort it out
@@ -225,9 +227,10 @@ export function phrase(tool: Intent["tool"], args: Record<string, any>, resultJs
     }
     const a = args as any;
     const who = c.title.split(" to ").pop();
+    const shown = a.max ? (c.title.match(/^Send (\S+) /)?.[1] ?? "") : fmt(a.amount, 4);
     return pick([
-      `Sure, ${fmt(a.amount, 4)} ${a.token} to ${who}. Give the address a quick check on the card, then tap Approve.${rehearsal}`,
-      `Okay, ${fmt(a.amount, 4)} ${a.token} going to ${who}. Check the card and tap Approve when you're ready.${rehearsal}`,
+      `Sure, ${shown} ${a.token} to ${who}. Give the address a quick check on the card, then tap Approve.${rehearsal}`,
+      `Okay, ${shown} ${a.token} going to ${who}. Check the card and tap Approve when you're ready.${rehearsal}`,
     ]);
   }
 

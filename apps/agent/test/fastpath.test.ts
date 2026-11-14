@@ -238,3 +238,9 @@ test("a saved contact's balance is read from the name, never from an address", (
   assert.equal(r({ contact: "Treasury", balances: [{ symbol: "NEAR", amount: "0" }] }), "Treasury is empty right now.");
   assert.match(r({ contact: "Treasury", balances: [{ symbol: "NEAR", amount: "0.003" }] })!, /just dust/);
 });
+
+test("'send all ... to <contact>' becomes a max proposal; tricky versions stay with the model", () => {
+  assert.deepEqual(routeIntent("send all my near to Hosted Orbi"), { tool: "propose_send", args: { token: "NEAR", max: true, to_name: "Hosted Orbi" } });
+  assert.deepEqual(routeIntent("Send max USDC to Treasury please"), { tool: "propose_send", args: { token: "USDC", max: true, to_name: "Treasury" } });
+  assert.equal(routeIntent("send all my near to Mom and then swap everything"), null);
+});
