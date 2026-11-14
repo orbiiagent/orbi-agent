@@ -167,6 +167,7 @@
   #contacts .c strong { flex-shrink: 0; font-weight: 600; }
   #contacts .c button { flex-shrink: 0; }
   #contacts .c span.a { color: var(--faint); font: 12px ui-monospace, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  #contacts form[hidden], #bridge[hidden], #bridgeHead[hidden] { display: none; }
   #contacts form { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   #contacts input[type=text] { background: rgba(255, 255, 255, .05); color: var(--text); border: 1px solid var(--line2); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 13px; min-width: 0; }
   #contacts input[type=text]:focus { outline: none; border-color: rgba(122, 162, 255, .6); }
@@ -225,12 +226,12 @@
     <label><input type="checkbox" id="bk"> <span>If Bella's voice is unavailable, use the browser's robotic voice instead of staying silent</span></label>
     <h4>Contacts</h4>
     <div id="contacts">
-      <span style="color:var(--faint)">Say "send 1 NEAR to Mom". Addresses are never taken by voice: paste them here.</span>
+      <span id="contactHelp" style="color:var(--faint)">Say "send 1 NEAR to Mom". Addresses are never taken by voice: paste them here.</span>
       <div id="contactList"></div>
       <form id="contactForm" autocomplete="off"><input type="text" name="name" placeholder="Name" aria-label="Contact name"><input type="text" name="address" placeholder="NEAR address" aria-label="Contact address"><button type="submit">Add</button></form>
       <div id="contactMsg" role="status"></div>
     </div>
-    <h4>Bridge</h4>
+    <h4 id="bridgeHead">Bridge</h4>
     <div id="bridge">
       <span style="color:var(--faint)">To bring USDC in from Base, say "bring in 10 USDC from Base". Orbi shows an address on a card and you send the USDC yourself. If a deposit can't complete, it is refunded to the Base address below: use a wallet you control, not an exchange deposit address.</span>
       <form id="bridgeForm" autocomplete="off"><input type="text" name="refund" placeholder="Your Base address (0x…) for refunds" aria-label="Your Base address for refunds"><button type="submit">Save</button></form>
@@ -978,6 +979,8 @@ fetch("/api/status").then((r) => r.json()).then((s) => {
       ? "Shared demo with a small LIVE test wallet: real funds, tiny amounts (up to $" + s.limits.per_action_usd + " per action). You can swap, and send only to Treasury" + (s.live_actions_per_visitor ? " (" + s.live_actions_per_visitor + " real actions per person per day)" : "") + ". Please do not send your own funds anywhere."
       : "Shared demo in rehearsal mode: nothing is sent or signed.";
     $("contactForm").hidden = true;
+    $("contactHelp").textContent = "On this shared demo you can send only to Treasury. Say \"send 0.3 NEAR to Treasury\". Contacts can't be added here.";
+    $("bridge").hidden = true; $("bridgeHead").hidden = true;
   }
   $("mode").title = s.mode; $("mode").textContent = s.execution === "live" ? "LIVE · " + s.network : s.execution === "rehearsal" ? "rehearsal" : "read-only"; $("mode").classList.toggle("live", s.execution === "live");
   if (s.voice === "elevenlabs") {
