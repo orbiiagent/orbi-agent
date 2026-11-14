@@ -815,8 +815,9 @@ async function engineStart() {
         modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.5, cooldownMs: 2500,
       });
       engine.on("detect", () => {
-        if (!$("wake").checked || recording || awaitingTap) return;
-        if (isSpeaking()) { stopSpeaking(); listenOnce({ followUp: true }); return; }   // saying the wake word also interrupts Orbi
+        if (!$("wake").checked || recording) return;
+        if (isSpeaking()) { stopSpeaking(); listenOnce({ followUp: true }); return; }   // saying the wake word also interrupts Orbi, even while it reads a card out
+        if (awaitingTap) return;
         if (!busy) wakeHit("");
       });
       engine.on("error", () => {});
@@ -855,6 +856,7 @@ async function viStart() {
   clearInterval(viTimer);
   viTimer = setInterval(() => {
     if (!$("vi").checked || recording || !isSpeaking()) { viHits = 0; return; }
+    if (viCtx.state === "suspended") viCtx.resume().catch(() => {});   // a suspended audio context reads silence, so nothing would ever interrupt
     viAn.getFloatTimeDomainData(viBuf);
     let sum = 0; for (let i = 0; i < viBuf.length; i++) sum += viBuf[i] * viBuf[i];
     const rms = Math.sqrt(sum / viBuf.length), limit = Math.max(0.035, viLeak * 3);
@@ -868,7 +870,7 @@ window.addEventListener("load", async () => {
   $("wake").onchange(); $("vi").onchange();
 });
 // browsers keep audio paused until the first tap: wake it then
-addEventListener("pointerdown", () => { if (viCtx && viCtx.state === "suspended") viCtx.resume(); }, { once: true });
+for (const evn of ["pointerdown", "keydown"]) addEventListener(evn, () => { if (viCtx && viCtx.state === "suspended") viCtx.resume().catch(() => {}); });
 $("vi").onchange = () => { if ($("vi").checked) viStart(); else { clearInterval(viTimer); viTimer = null; } };
 
 /* ---------------- controls ---------------- */
