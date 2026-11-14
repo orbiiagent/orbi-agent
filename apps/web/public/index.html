@@ -546,7 +546,7 @@ function makeSpeaker(context) {
     const p = voiceMode === "elevenlabs" ? getClip() : null;
     chain = chain.then(async () => {
       while (recording && token === speakToken) await new Promise((r) => setTimeout(r, 120));   // the owner is talking: hold the answer until they finish
-      if (token !== speakToken || $("mute").checked || awaitingTap) return;
+      if (token !== speakToken || $("mute").checked) return;   // a card opening mid-answer does not silence it: Orbi reads out what the card is
       if (!begun) { begun = true; speaking = true; setMode("speaking", "Orbi is speaking · tap to interrupt or ask something"); }
       if (p) {
         try { await playClip(await p, 1, token); return; }
@@ -920,8 +920,8 @@ function flowOf(dest, running) {
 function showCard(c) {
   if (c.kind === "deposit") return showDeposit(c);
   clearCardTimer(); card = c;
-  awaitingTap = true; stopHmm(); stopSpeaking(); stopWake();   // the card is what matters now: stop talking and stop listening
-  setMode("idle", idleMsg());
+  awaitingTap = true; stopHmm(); stopWake();   // stop listening. Orbi keeps talking if it is reading the card out, and stops the moment you tap Approve or Cancel
+  if (!isSpeaking() && !busy) setMode("idle", idleMsg());
   const box = $("card"); box.hidden = false; box.className = c.mode === "live" ? "live" : ""; box.textContent = "";
   document.body.classList.add("hasCard"); resize(); box.scrollIntoView({ block: "nearest" });
   if (c.mode !== "live") box.append(el("div", "tag", "Rehearsal · nothing will be sent"));   // no outline for live: the owner sees the mode in the settings and every action needs a tap
@@ -1082,7 +1082,7 @@ function startStages(c, pl) {
 async function approveCard() {
   if (!card) return;
   const c = card, pl = planOf(c), buttons = $("card").querySelectorAll("button"); buttons.forEach((b) => (b.disabled = true));
-  awaitingTap = false; clearCardTimer(); $("cardTimer") && ($("cardTimer").textContent = "Working…"); setMode("thinking", "Working on it…");
+  awaitingTap = false; clearCardTimer(); stopSpeaking(); $("cardTimer") && ($("cardTimer").textContent = "Working…"); setMode("thinking", "Working on it…");
   const view = pl ? startStages(c, pl) : null;
   let polling = false, stop = false, n = 0;
   const poll = async () => {
@@ -1106,7 +1106,7 @@ async function approveCard() {
   }
 }
 async function cancelCard() {
-  if (!card) return; const c = card; awaitingTap = false; hideCard();
+  if (!card) return; const c = card; awaitingTap = false; stopSpeaking(); hideCard();
   try { await fetch("/api/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, id: c.id }) }); } catch {}
   const msg = "Okay, cancelled. Nothing was sent.";
   showOrbi(msg); await say(msg, {});   // the caption must change too, or it keeps showing the old "check the card" line
