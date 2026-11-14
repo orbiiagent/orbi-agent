@@ -526,6 +526,11 @@ function say(text, opts = {}) {
     });
   return sayBrowser(text, opts);
 }
+// After Orbi finishes speaking outside a chat turn (a result, a cancel, a deposit), the screen must go back to idle, or it stays on "Orbi is speaking".
+async function sayAndSettle(text) {
+  await say(text, {});
+  if (mode === "speaking" && !isSpeaking() && !busy) { setMode("idle", idleMsg()); if ($("wake").checked && !awaitingTap) startWake(); }
+}
 function stopSpeaking() {
   speakToken++; try { audioEl.pause(); } catch {}
   if (pendingResolve) { pendingResolve(); pendingResolve = null; }
@@ -991,7 +996,7 @@ function showDeposit(c) {
       if (j.state === "done" || j.state === "refunded" || j.state === "failed" || j.state === "expired") {
         finished = true; status.className = "line " + (j.state === "done" ? "ok" : "bad");
         if (j.txUrl) { const l = el("a", "", "View the transaction"); l.href = j.txUrl; l.target = "_blank"; l.rel = "noopener noreferrer"; box.insertBefore(l, ttl); }
-        if (!busy) { showOrbi(j.spoken); say(j.spoken, {}); }
+        if (!busy) { showOrbi(j.spoken); sayAndSettle(j.spoken); }
       }
     } catch {} busyPoll = false;
   };
@@ -1098,18 +1103,18 @@ async function approveCard() {
     const j = await r.json(); stop = true; if (pt) clearInterval(pt);
     if (!r.ok) throw new Error(j.error || "Request failed");
     if (view) view.finish(j.ok, j); else cardResult(j.ok, j.lines, j.txs);
-    setMode("idle", idleMsg()); showOrbi(j.spoken); await say(j.spoken, {});
+    setMode("idle", idleMsg()); showOrbi(j.spoken); await sayAndSettle(j.spoken);
   } catch (e) {
     stop = true; if (pt) clearInterval(pt);
     if (view && view.real) view.finish(false, { lines: [e.message], txs: [] }); else cardResult(false, [e.message], []);
-    setMode("idle", idleMsg()); showOrbi(e.message); await say(e.message, {});
+    setMode("idle", idleMsg()); showOrbi(e.message); await sayAndSettle(e.message);
   }
 }
 async function cancelCard() {
   if (!card) return; const c = card; awaitingTap = false; stopSpeaking(); hideCard();
   try { await fetch("/api/reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, id: c.id }) }); } catch {}
   const msg = "Okay, cancelled. Nothing was sent.";
-  showOrbi(msg); await say(msg, {});   // the caption must change too, or it keeps showing the old "check the card" line
+  showOrbi(msg); await sayAndSettle(msg);   // the caption must change too, or it keeps showing the old "check the card" line
 }
 // a card that is still open survives a page reload
 fetch("/api/card?session=" + encodeURIComponent(session)).then((r) => r.json()).then((j) => { if (j.card) showCard(j.card); }).catch(() => {});
