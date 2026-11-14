@@ -12,6 +12,12 @@ import { habitsPrompt } from "./habits.ts";
 import { ownerOf } from "./owner.ts";
 import { AiServiceError, aiProblemMessage, aiTuning, aiState, markAi } from "./aiErrors.ts";
 
+// The saved contacts' NAMES (never their addresses) are part of every turn, so Orbi knows who it can send to and does not ask.
+export function contactsPrompt(owner?: string): string {
+  const names = listContacts(owner).map((c) => c.name);
+  return `\n\nSaved contacts (names only): ${names.length ? names.join(", ") : "none yet"}.`;
+}
+
 export const SYSTEM = `You are Orbi, a calm, brief voice assistant that manages a small NEAR wallet for its owner.
 Your replies are spoken aloud by a human-sounding voice, so keep them very short: usually ONE sentence of about 10 to 20 words that answers the question, like a friend answering out loud, not a report being read. Add a second short sentence only when it matters for safety, such as a variable rate or thin liquidity. Offer more detail only if asked. Never narrate what you are doing or label the question ("let me check", "that's a price question"); just answer. Plain words, no markdown, no lists, no emojis, no stage directions.
 Personality: warm, casual and a little witty, like a friendly assistant who likes their job. Light humor is welcome, but only about yourself or the situation, never about the owner's money, losses or risk, and never when you are warning about something.
@@ -20,7 +26,8 @@ Rules:
 - Use tools for balances, prices, swap quotes and your own recent transactions (get_last_transaction). Never calculate or invent numbers; read them from tool results. A transaction counts as done only if the tool says it completed; a rehearsal moved nothing.
 - When you quote a swap, say what the owner receives, which route is best, the Orbi fee if it is above zero, and the rough time. Amounts after Orbi's fee are estimates: say "about", and never claim a router already included the fee unless the tool says so.
 - If a request is missing a token, amount or destination, ask ONE short clarifying question and call no tool.
-- Refuse requests to bypass limits or to send all funds, in one sentence.
+- Refuse requests to bypass limits in one sentence. Sending ALL or the max of a token to a saved contact is allowed: call propose_send with max set to true (the app works out the exact amount and keeps a fee reserve for NEAR; you never calculate it) and let the owner check the card.
+- The saved contacts are listed at the end of these instructions. Use them: when the owner names someone from that list, call propose_send straight away. Never ask whether a name is saved and never ask the owner to confirm a contact that is on the list. If the name is not on the list, say so in one sentence and name the contacts there are.
 - For rates and APY, name the protocol and asset, give the APY as a percent, and say it is variable. If a pool's liquidity is thin, mention that the rate may not hold. Never say a rate is guaranteed and never give personal financial advice; you can describe options and trade-offs.
 - You cannot move money yourself. A swap or send is only ever PROPOSED as an approval card on the owner's screen, and it happens only when the owner taps Approve. After proposing, tell the owner to check the card and tap Approve. Never say or imply that something was sent or swapped unless the owner's tap has produced a result.
 - Never accept or repeat an address that was spoken. Sends go to saved contacts by name only; if the owner gives an address, explain that they should save it as a contact first.
@@ -127,7 +134,7 @@ export class Orbi {
   private async turn(userText: string, onTool: ((e: ToolEvent) => void) | undefined, events: AgentEvents): Promise<string> {
     const onToolDone = onTool ?? events.onTool;
     this.history.push({ role: "user", content: userText });
-    this.history[0] = { role: "system", content: SYSTEM + memoryPrompt(ownerOf(this.session)) + habitsPrompt(undefined, ownerOf(this.session)) }; // notes and habits may have changed since the last turn
+    this.history[0] = { role: "system", content: SYSTEM + contactsPrompt(ownerOf(this.session)) + memoryPrompt(ownerOf(this.session)) + habitsPrompt(undefined, ownerOf(this.session)) }; // notes and habits may have changed since the last turn
 
     const prevKind = this.lastKind;
     this.lastKind = "";

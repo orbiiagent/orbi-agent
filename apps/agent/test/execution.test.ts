@@ -497,3 +497,14 @@ test("send all still obeys the per-action limit", async () => {
   const m = mockChain({ native: 50n * NEAR });
   await assert.rejects(() => proposeSend("s1", { token: "NEAR", max: true, to_name: "Treasury" }, newPolicyState(), deps(m.chain)), /can't do that one/);
 });
+
+test("Orbi is told the saved contacts' names (never addresses), and that send-all is allowed", async () => {
+  const { contactsPrompt, SYSTEM } = await import("../src/agent.ts");
+  addContact("Hosted Orbi", "2fe35d2b512fd1282be5649de9106beb69218edc810e77993a78077265d898fd");
+  const p = contactsPrompt();
+  assert.match(p, /Saved contacts \(names only\): .*Hosted Orbi/);
+  assert.ok(!/[0-9a-f]{64}/.test(p), "no address in the prompt");
+  assert.match(SYSTEM, /Sending ALL or the max .* max set to true/);
+  assert.ok(!/Refuse requests .* to send all funds/.test(SYSTEM));
+  removeContact("Hosted Orbi");
+});
