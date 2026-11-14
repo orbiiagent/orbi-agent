@@ -650,8 +650,9 @@ const MIC = { audio: { echoCancellation: true, noiseSuppression: true, autoGainC
 let roomRms = 0.008;
 function wakeLevel() {   // how sure the wake-word model must be, by the room's noise
   const n = $("noise").value;
-  if (n === "quiet") return 0.4; if (n === "normal") return 0.46; if (n === "noisy") return 0.62;
-  return roomRms > 0.03 ? 0.62 : roomRms > 0.015 ? 0.54 : 0.45;   // people talking nearby read about 0.015 and up
+  // A false wake only costs a "Yes?" (what Orbi then accepts is filtered separately and strictly), a miss costs you repeating yourself: so the wake word stays sensitive.
+  if (n === "quiet") return 0.34; if (n === "normal") return 0.4; if (n === "noisy") return 0.55;
+  return roomRms > 0.03 ? 0.5 : roomRms > 0.015 ? 0.43 : 0.38;
 }
 const tuneWake = () => { try { if (engine && engine.config) engine.config.detectionThreshold = wakeLevel(); } catch {} };
 const SHORT_OK = /^(yes|yeah|yep|no|nope|okay|ok|sure|thanks|thank you|cancel|stop|go ahead|please|never mind|nevermind|that's all|what|why|how|really|and|continue|repeat that|say that again)$/i;
@@ -824,7 +825,7 @@ async function engineStart() {
       const { WakeWordEngine } = await import("/wake/WakeWordEngine.js");
       engine = new WakeWordEngine({
         keywords: [kw], baseAssetUrl: "/wake/models", ortWasmPath: "/wake/",
-        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.45, cooldownMs: 1500,
+        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.38, cooldownMs: 1200,
       });
       engine.on("detect", () => {
         if (!$("wake").checked || recording) return;

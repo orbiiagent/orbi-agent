@@ -309,7 +309,7 @@ export class WakeWordEngine {
             this._vadState.c = res.cn;
             const confidence = res.output.data[0];
             this._debug('VAD result', { confidence: Number(confidence.toFixed(3)) });
-            return confidence > 0.42;
+            return confidence > 0.33;
         } catch (err) {
             this._emitter.emit('error', err);
             return false;
