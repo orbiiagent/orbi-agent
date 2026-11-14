@@ -4,6 +4,7 @@ import { config } from "./config.ts";
 import { TGAS, explorerTx, type Chain, type TxResult } from "./chain.ts";
 import { findToken, fromUnits, toUnits } from "./tokens.ts";
 import { applyFee, type RheaRoute } from "./quotes.ts";
+import { explainFailure } from "./diagnose.ts";
 
 export const AGGREGATOR = "aggregatedex.near";
 const NEAR_YOCTO = 10n ** 24n;
@@ -23,7 +24,7 @@ const fail = (msg: string): never => {
 const yocto = (nearAmount: bigint) => `${fromUnits(nearAmount, 24, 4)} NEAR`;
 const tx = (label: string, r: TxResult) => ({ label, hash: r.txHash, url: explorerTx(r.txHash) });
 function must(label: string, r: TxResult): TxResult {
-  if (!r.ok) throw new ExecError(`${label} failed on-chain: ${r.failure ?? "unknown error"}`);
+  if (!r.ok) throw new ExecError(`${label} failed on-chain: ${explainFailure(r.failure)}`);
   return r;
 }
 
@@ -155,11 +156,13 @@ export async function executeSwapRhea(a: SwapAction, chain: Chain, deps: SwapDep
   }
   const gotText = got > 0n ? `${fromUnits(got, to.decimals, 4)} ${to.symbol}` : "nothing yet";
   const ok = got > 0n;
+  let why: string | null = null;
+  if (!ok) { try { why = (await chain.diagnose?.(r.txHash)) ?? null; } catch { why = null; } }   // read-only: asks the network's own record why
   return {
     ok,
     txs,
-    spoken: ok ? `Done. I swapped ${a.amount} ${from.symbol} and received about ${gotText}.` : `The swap went through on-chain, but I don't see the ${to.symbol} yet. Check the transaction link.`,
-    lines: [`Swapped ${a.amount} ${from.symbol} via Rhea`, `Received ${gotText}`],
+    spoken: ok ? `Done. I swapped ${a.amount} ${from.symbol} and received about ${gotText}.` : `The swap went through on-chain, but I don't see the ${to.symbol} yet. ${why ?? "Check the transaction link."}`,
+    lines: ok ? [`Swapped ${a.amount} ${from.symbol} via Rhea`, `Received ${gotText}`] : [`Swapped ${a.amount} ${from.symbol} via Rhea`, `Received ${gotText}`, ...(why ? [`Why: ${why}`] : [])],
   };
 }
 

@@ -508,3 +508,14 @@ test("Orbi is told the saved contacts' names (never addresses), and that send-al
   assert.ok(!/Refuse requests .* to send all funds/.test(SYSTEM));
   removeContact("Hosted Orbi");
 });
+
+test("a swap whose output does not show up gets the network's reason in what Orbi says and shows", async () => {
+  const m = mockChain({ views: (c, mth) => (c === AGGREGATOR && mth === "query_user_tokens_registered" ? [true, true, true] : mth === "storage_balance_of" ? REG : mth === "ft_balance_of" ? "5000000" : null) });   // nothing arrives
+  const chain = { ...m.chain, diagnose: async () => "The router paid you 0.5 wNEAR instead of plain NEAR." };
+  const r = await executeSwapRhea(swap(), chain, { fetchRoute: async () => route("495000000000000000000000") });
+  assert.equal(r.ok, false);
+  assert.match(r.spoken, /I don't see the NEAR yet\. The router paid you 0\.5 wNEAR/);
+  assert.ok(r.lines.some((l) => l.startsWith("Why: ")));
+  const none = await executeSwapRhea(swap(), { ...m.chain, diagnose: async () => { throw new Error("rpc down"); } }, { fetchRoute: async () => route("495000000000000000000000") });
+  assert.match(none.spoken, /Check the transaction link/, "a failing diagnosis never hides the plain message");
+});

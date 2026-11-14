@@ -1094,10 +1094,14 @@ function startStages(c, pl) {
     finish(ok, j) {
       for (const it of items) { if (it.state === "pending" || it.state === "doing") it.state = ok ? (it.optional ? "skipped" : "done") : it.state === "doing" ? "failed" : "pending"; paint(it); }
       setRecv(false); to.classList.add(ok ? "arrived" : "failed"); wire.className = "wire " + (ok ? "ok" : "bad"); wire.textContent = "";
-      title.textContent = ok ? "Done" : "Not done"; title.className = ok ? "ok" : "bad";
-      const who = box.querySelector(".who"); if (who) { who.querySelector("b").textContent = ok ? "Orbi finished" : "Orbi stopped"; who.querySelector("span").textContent = ok ? "All steps complete" : "See what happened below"; }
-      const badge = el("div", "badge " + (ok ? "ok" : "bad"), ok ? "\u2713" : "!"); box.insertBefore(badge, title);
-      for (const l of j.lines || []) sums.append(el("div", ok ? "ok" : "bad", l));
+      const L = j.lines || [];
+      // the title says what happened, in the same bold style as while it was running (no big tick and no "Done")
+      let head = "Not done", rest = L;
+      if (ok && rehearsal) { head = "Rehearsal finished. Nothing was sent."; rest = L.slice(1); }
+      else if (ok) { head = pl.kind === "swap" && L[1] ? `Swapped ${pl.amt} ${pl.sym} and received ${L[1].replace(/^Received /, "")}` : (L[0] || "Done"); rest = []; }
+      title.textContent = head; title.className = ok ? "" : "bad";
+      const who = box.querySelector(".who > div"); if (who) { who.children[0].textContent = ok ? "Orbi finished" : "Orbi stopped"; who.children[1].textContent = ok ? "All steps complete" : "See what happened below"; }
+      for (const l of rest) sums.append(el("div", ok ? "ok" : "bad", l));
       for (const t of j.txs || []) {
         const row = el("div", "line", t.label + ": ");
         if (t.url) { const a = el("a", "", t.hash.slice(0, 10) + "\u2026"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer"; row.append(a); } else row.append(document.createTextNode(t.hash));

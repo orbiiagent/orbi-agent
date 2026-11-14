@@ -13,6 +13,7 @@ export interface Chain {
   accountExists(accountId: string): Promise<boolean>;
   call(contractId: string, method: string, args: Record<string, unknown>, opts?: CallOpts): Promise<TxResult>;
   transferNative(toAccountId: string, amountYocto: bigint): Promise<TxResult>;
+  diagnose?(txHash: string): Promise<string | null>; // a plain reason for an unexpected or failed transaction (read-only)
 }
 
 export const TGAS = 1_000_000_000_000n;
@@ -84,6 +85,7 @@ export function realChain(): Chain {
     },
     view: viewCall,
     accountExists: accountExistsOnChain,
+    diagnose: async (hash) => (await import("./diagnose.ts")).diagnoseTx(hash, config.agentAccount),
     async call(contractId, method, args, opts = {}) {
       const r = await account.callFunctionRaw({ contractId, methodName: method, args, deposit: opts.depositYocto ?? 0n, gas: opts.gas ?? 30n * TGAS, waitUntil: opts.waitUntil ?? "INCLUDED_FINAL" });
       return outcomeToResult(r);
