@@ -765,8 +765,15 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let wakeRec = null, wakeTimer = null;
 // Speech recognition often writes "Orbi" as another word, and "HeyOrbi" as one word, so accept the usual mishearings.
 const WAKE_RE = /\b(?:(?:hey|hi|hay|okay|ok|a|hello)\s*)?(?:orbi|orby|orbie|orbit|orbee|orbe|orby|orbs|or be|or b|oh be|obi|orpie|arbi|arby)\b[\s,.!?]*/i;
-const GREETINGS = ["Hi there!", "Hey! How's it going?", "Hi! What's up?", "Yep, I'm here.", "Hey you. What can I do?"];
-let lastGreet = "";
+let chimeCtx = null;
+function chime() {   // a very short, soft two-note sound: heard instantly, costs nothing, and is gone before Orbi starts listening
+  if ($("mute").checked) return;
+  try {
+    chimeCtx = chimeCtx || new (window.AudioContext || window.webkitAudioContext)(); if (chimeCtx.state === "suspended") chimeCtx.resume().catch(() => {});
+    const t = chimeCtx.currentTime;
+    [[660, 0], [880, 0.07]].forEach(([f, d]) => { const o = chimeCtx.createOscillator(), g = chimeCtx.createGain(); o.frequency.value = f; o.connect(g); g.connect(chimeCtx.destination); g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(0.06, t + d + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.13); o.start(t + d); o.stop(t + d + 0.14); });
+  } catch {}
+}
 function startWake() {
   if (awaitingTap) return;
   if (engineState === "loading" || engineState === "on") return;   // the on-device engine is in charge
@@ -793,9 +800,8 @@ async function wakeHit(rest) {
   stopWake();
   if (rest.split(/\s+/).filter(Boolean).length >= 2) { ask(rest, true); return; }   // asked in the same breath
   ensureAudio();
-  let g; do { g = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]; } while (g === lastGreet); lastGreet = g;
-  showUser(""); showOrbi(g); setMode("speaking", g);
-  await say(g, {});
+  // Natural talking: no spoken greeting to wait through. A soft chime, then Orbi is already listening.
+  showUser(""); showOrbi(""); chime();
   if (!busy && !recording) listenOnce({ followUp: true });
 }
 // Chrome sometimes ends or silently drops the listener: check every 2 seconds and bring it back.
@@ -812,7 +818,7 @@ async function engineStart() {
       const { WakeWordEngine } = await import("/wake/WakeWordEngine.js");
       engine = new WakeWordEngine({
         keywords: [kw], baseAssetUrl: "/wake/models", ortWasmPath: "/wake/",
-        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.5, cooldownMs: 2500,
+        modelFiles: { [kw]: custom ? "hey_orbi.onnx" : "hey_jarvis_v0.1.onnx" }, detectionThreshold: 0.38, cooldownMs: 1200,
       });
       engine.on("detect", () => {
         if (!$("wake").checked || recording) return;
